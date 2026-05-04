@@ -255,16 +255,32 @@ async def check_missed_days():
         check_cur.execute("SELECT 1 FROM workouts WHERE user_id=? AND date=?", (uid, yesterday))
         if not check_cur.fetchone():
             lang = get_user_language(uid)
-            messages = [
-                pick_lang(lang, "💪 Вчора пропустив тренування?\nСьогодні новий день! 🔥 /suggest", "💪 Missed a workout yesterday?\nToday is a new day! 🔥 /suggest"),
-                pick_lang(lang, "😴 Відпочив вчора? Повертайся до строю! /today", "😴 Rested yesterday? Back to action! /today"),
-                pick_lang(lang, "⚡ Швидкий тест: /suggest → ✅ Виконав!", "⚡ Quick test: /suggest → ✅ Done!")
-            ]
+            messages = get_missed_day_messages(lang)
             await bot.send_message(uid, random.choice(messages))
         check_cur.close()
 
     db.close()
     print("✅Перевірка пропущених днів виконана.")
+
+
+def get_missed_day_messages(lang: str):
+    return [
+        pick_lang(
+            lang,
+            "💪 Вчора пропустив тренування?\nСьогодні новий день! 🔥 /suggest",
+            "💪 Missed a workout yesterday?\nToday is a new day! 🔥 /suggest"
+        ),
+        pick_lang(
+            lang,
+            "😴 Відпочив вчора? Повертайся до строю! /today",
+            "😴 Rested yesterday? Back to action! /today"
+        ),
+        pick_lang(
+            lang,
+            "⚡ Швидкий тест: /suggest → ✅ Виконав!",
+            "⚡ Quick test: /suggest → ✅ Done!"
+        )
+    ]
 
 
 # ---------- DB ----------
