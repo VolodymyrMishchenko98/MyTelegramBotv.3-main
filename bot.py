@@ -102,28 +102,44 @@ language_kb = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 MOTIVATION_QUOTES = [
-    "Маленькі кроки щодня = великі результати через місяць.",
-    "Ти не завжди маєш бути мотивованим. Будь дисциплінованим.",
-    "Кожне тренування - це інвестиція у майбутнього себе.",
-    "Не зупиняйся, коли втомився. Зупиняйся, коли завершив.",
-    "Прогрес важливіший за ідеальність."
+    ("Маленькі кроки щодня = великі результати через місяць.", "Small steps every day = big results in a month."),
+    ("Ти не завжди маєш бути мотивованим. Будь дисциплінованим.", "You don't always have to be motivated. Be disciplined."),
+    ("Кожне тренування - це інвестиція у майбутнього себе.", "Every workout is an investment in your future self."),
+    ("Не зупиняйся, коли втомився. Зупиняйся, коли завершив.", "Don't stop when you're tired. Stop when you're done."),
+    ("Прогрес важливіший за ідеальність.", "Progress is more important than perfection.")
 ]
 
 HEALTH_TIPS = [
-    "Після тренування випий склянку води протягом 15 хвилин.",
-    "Роби 5 хвилин розминки перед будь-яким навантаженням.",
-    "Сон 7-8 годин пришвидшує відновлення м'язів.",
-    "Додай білок до кожного основного прийому їжі.",
-    "Краще 20 хвилин руху щодня, ніж 2 години раз на тиждень."
+    ("Після тренування випий склянку води протягом 15 хвилин.", "After training, drink a glass of water within 15 minutes."),
+    ("Роби 5 хвилин розминки перед будь-яким навантаженням.", "Do 5 minutes of warm-up before any load."),
+    ("Сон 7-8 годин пришвидшує відновлення м'язів.", "7-8 hours of sleep speeds up muscle recovery."),
+    ("Додай білок до кожного основного прийому їжі.", "Add protein to every main meal."),
+    ("Краще 20 хвилин руху щодня, ніж 2 години раз на тиждень.", "20 minutes of movement every day is better than 2 hours once a week.")
 ]
 
 FITNESS_CHALLENGES = [
-    "30 присідань + 20 відтискувань + планка 40 сек",
-    "Швидка прогулянка 25 хв + розтяжка 5 хв",
-    "3 кола: 15 випадів, 20 скручувань, планка 30 сек",
-    "Біг або швидкий крок 20 хв без зупинок",
-    "100 стрибків на місці + 20 присідань + 20 випадів"
+    ("30 присідань + 20 відтискувань + планка 40 сек", "30 squats + 20 push ups + 40 sec plank"),
+    ("Швидка прогулянка 25 хв + розтяжка 5 хв", "25 min brisk walk + 5 min stretch"),
+    ("3 кола: 15 випадів, 20 скручувань, планка 30 сек", "3 rounds: 15 lunges, 20 sit ups, 30 sec plank"),
+    ("Біг або швидкий крок 20 хв без зупинок", "20 min run or fast walk without breaks"),
+    ("100 стрибків на місці + 20 присідань + 20 випадів", "100 jumps in place + 20 squats + 20 lunges")
 ]
+
+
+def get_localized_choice(lang: str, items):
+    return random.choice(items)[1 if lang == "en" else 0]
+
+
+def get_motivation_quote(lang: str) -> str:
+    return get_localized_choice(lang, MOTIVATION_QUOTES)
+
+
+def get_health_tip(lang: str) -> str:
+    return get_localized_choice(lang, HEALTH_TIPS)
+
+
+def get_fitness_challenge(lang: str) -> str:
+    return get_localized_choice(lang, FITNESS_CHALLENGES)
 
 
 def pick_lang(lang: str, uk: str, en: str) -> str:
@@ -185,46 +201,87 @@ def build_start_text(lang: str) -> str:
     )
 
 
-def generate_workout(goal: str) -> str:
-    if "наб" in goal:
-        return (random.choice(
-            ["💪 Тренування на набір маси:\n"
-             "• Відтискування 4x15–20\n"
-             "• Присідання 4x25\n"
-             "• Випади 3x12\n"
-             "• Планка 3x40 сек",
-             "💪 Тренування на набір маси:\n"
-             "• Відтискування вузькі 4x12\n"
-             "• Присідання з паузою 4x20\n"
-             "• Ягодичний міст 3x20\n"
-             "• Планка 3x45 сек"])
+def generate_workout(goal: str, lang: str) -> str:
+    goal_lower = goal.lower()
 
-        )
-    elif "схуд" in goal or "дієт" in goal:
-        return (random.choice([
-            "🔥 Тренування на спалювання жиру:\n"
-            "• Біг 20–30 хвилин\n"
-            "• Бьорпі 3x12\n"
-            "• Стрибки 3x40 сек\n"
-            "• Планка 3x30 сек",
-            "🔥 Тренування на спалювання жиру:\n"
-            "• Jumping Jack 4x40 сек\n"
-            "• Альпініст 3x30 сек\n"
-            "• Присідання 3x25\n"
-            "• Планка 3x35 сек"])
-        )
+    if lang == "en":
+        if any(keyword in goal_lower for keyword in ("gain", "mass", "muscle")):
+            return random.choice([
+                "💪 Muscle gain workout:\n"
+                "• Push ups 4x15–20\n"
+                "• Squats 4x25\n"
+                "• Lunges 3x12\n"
+                "• Plank 3x40 sec",
+                "💪 Muscle gain workout:\n"
+                "• Narrow push ups 4x12\n"
+                "• Pause squats 4x20\n"
+                "• Glute bridge 3x20\n"
+                "• Plank 3x45 sec"
+            ])
+        elif any(keyword in goal_lower for keyword in ("lose", "fat", "diet", "slim")):
+            return random.choice([
+                "🔥 Fat burning workout:\n"
+                "• Running 20–30 min\n"
+                "• Burpees 3x12\n"
+                "• Jumps 3x40 sec\n"
+                "• Plank 3x30 sec",
+                "🔥 Fat burning workout:\n"
+                "• Jumping Jacks 4x40 sec\n"
+                "• Mountain climbers 3x30 sec\n"
+                "• Squats 3x25\n"
+                "• Plank 3x35 sec"
+            ])
+        else:
+            return random.choice([
+                "🏋️ General workout:\n"
+                "• Push ups 3x15\n"
+                "• Squats 3x20\n"
+                "• Plank 3x30 sec",
+                "🏋️ General workout:\n"
+                "• Push ups 3x12\n"
+                "• Lunges 3x12\n"
+                "• Bicycle 3x30 sec\n"
+                "• Plank 3x40 sec"
+            ])
     else:
-        return (random.choice([
-            "🏋️ Універсальне тренування:\n"
-            "• Відтискування 3x15\n"
-            "• Присідання 3x20\n"
-            "• Планка 3x30 сек",
-            "🏋️ Універсальне тренування:\n"
-            "• Відтискування 3x12\n"
-            "• Випади 3x12\n"
-            "• Велосипед 3x30 сек\n"
-            "• Планка 3x40 сек"])
-        )
+        if "наб" in goal_lower:
+            return random.choice([
+                "💪 Тренування на набір маси:\n"
+                "• Відтискування 4x15–20\n"
+                "• Присідання 4x25\n"
+                "• Випади 3x12\n"
+                "• Планка 3x40 сек",
+                "💪 Тренування на набір маси:\n"
+                "• Відтискування вузькі 4x12\n"
+                "• Присідання з паузою 4x20\n"
+                "• Ягодичний міст 3x20\n"
+                "• Планка 3x45 сек"
+            ])
+        elif "схуд" in goal_lower or "дієт" in goal_lower:
+            return random.choice([
+                "🔥 Тренування на спалювання жиру:\n"
+                "• Біг 20–30 хвилин\n"
+                "• Бьорпі 3x12\n"
+                "• Стрибки 3x40 сек\n"
+                "• Планка 3x30 сек",
+                "🔥 Тренування на спалювання жиру:\n"
+                "• Jumping Jack 4x40 сек\n"
+                "• Альпініст 3x30 сек\n"
+                "• Присідання 3x25\n"
+                "• Планка 3x35 сек"
+            ])
+        else:
+            return random.choice([
+                "🏋️ Універсальне тренування:\n"
+                "• Відтискування 3x15\n"
+                "• Присідання 3x20\n"
+                "• Планка 3x30 сек",
+                "🏋️ Універсальне тренування:\n"
+                "• Відтискування 3x12\n"
+                "• Випади 3x12\n"
+                "• Велосипед 3x30 сек\n"
+                "• Планка 3x40 сек"
+            ])
 
 
 
@@ -599,6 +656,7 @@ async def reset_profile(message: Message):
 @dp.callback_query(lambda c: c.data == "reset_yes")
 async def reset_yes(callback: CallbackQuery):
     uid = callback.from_user.id
+    lang = get_user_language(uid)
     db = get_db()
     cur = db.cursor()
 
@@ -609,7 +667,6 @@ async def reset_yes(callback: CallbackQuery):
     db.commit()
     db.close()
 
-    lang = get_user_language(uid)
     await callback.message.edit_text(pick_lang(lang, "Профіль повністю видалено.", "Profile and all data were deleted."))
 
 
@@ -848,8 +905,8 @@ async def reminders(message: Message):
     )
     row = cur.fetchone()
     
-    if not row:
-        # Новый пользователь - создаём запись с включенными напоминаниями
+    if not row or row[0] is None:
+        # Новый пользователь или неизвестный статус — включаем напоминания по умолчанию
         cur.execute(
             "INSERT INTO users (user_id, reminders_enabled) VALUES (?, 1)",
             (uid,)
@@ -958,14 +1015,14 @@ async def suggest(message: Message):
         await message.answer(pick_lang(lang, "Спочатку задай мету в профілі (/profile).", "Set a goal in your profile first (/profile)."))
         return
 
-    text = generate_workout(row[0])
+    text = generate_workout(row[0], lang)
     await message.answer(text, reply_markup=suggest_keyboard(lang))
 
 
 @dp.message(Command("motivate"))
 async def motivate(message: Message):
     lang = get_user_language(message.from_user.id)
-    quote = random.choice(MOTIVATION_QUOTES)
+    quote = get_motivation_quote(lang)
     title = pick_lang(lang, "Мотивація", "Motivation")
     await message.answer(
         style_block(title, f"💬 {quote}", icon="🚀"),
@@ -976,7 +1033,7 @@ async def motivate(message: Message):
 @dp.message(Command("tip"))
 async def tip(message: Message):
     lang = get_user_language(message.from_user.id)
-    tip_text = random.choice(HEALTH_TIPS)
+    tip_text = get_health_tip(lang)
     title = pick_lang(lang, "Порада дня", "Tip of the day")
     await message.answer(
         style_block(title, f"💡 {tip_text}", icon="🧠"),
@@ -987,7 +1044,7 @@ async def tip(message: Message):
 @dp.message(Command("challenge"))
 async def challenge(message: Message):
     lang = get_user_language(message.from_user.id)
-    challenge_text = random.choice(FITNESS_CHALLENGES)
+    challenge_text = get_fitness_challenge(lang)
     title = pick_lang(lang, "Челендж дня", "Challenge of the day")
     await message.answer(
         style_block(title, f"🔥 {challenge_text}", icon="🏆"),
@@ -1009,7 +1066,7 @@ async def suggest_retry(callback: CallbackQuery):
         await callback.answer(pick_lang(lang, "Немає мети", "No goal set"), show_alert=True)
         return
 
-    text = generate_workout(row[0])
+    text = generate_workout(row[0], lang)
     await callback.message.answer(text, reply_markup=suggest_keyboard(lang))
     await callback.answer()
 
@@ -1017,11 +1074,11 @@ async def suggest_retry(callback: CallbackQuery):
 @dp.callback_query(F.data == "suggest_done")
 async def suggest_done(callback: CallbackQuery):
     lang = get_user_language(callback.from_user.id)
-    await callback.answer("OK")
+    await callback.answer(pick_lang(lang, "ОК", "OK"))
     uid = callback.from_user.id
     today = datetime.now().strftime("%Y-%m-%d")
 
-    workout_text = callback.message.text.split("\n", 1)[1]
+    workout_text = callback.message.text or ""
 
     db = get_db()
     cur = db.cursor()
@@ -1053,7 +1110,7 @@ async def suggest_done(callback: CallbackQuery):
 @dp.callback_query(F.data == "challenge_next")
 async def challenge_next(callback: CallbackQuery):
     lang = get_user_language(callback.from_user.id)
-    challenge_text = random.choice(FITNESS_CHALLENGES)
+    challenge_text = get_fitness_challenge(lang)
     await callback.message.edit_text(
         style_block(pick_lang(lang, "Челендж дня", "Challenge of the day"), f"🔥 {challenge_text}", icon="🏆"),
         parse_mode="HTML",
@@ -1261,6 +1318,8 @@ async def handle_input(message: Message):
     if state == "weekly_goal":
         try:
             goal = int(message.text)
+            if goal < 1:
+                raise ValueError("invalid goal")
 
             db = get_db()
             cur = db.cursor()
