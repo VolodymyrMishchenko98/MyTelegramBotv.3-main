@@ -274,6 +274,25 @@ def pick_lang(lang: str, uk: str, en: str) -> str:
     return en if lang == "en" else uk
 
 
+def gender_display(lang: str, gender_value: str) -> str:
+    v = (gender_value or "").strip().lower()
+
+    # Что сейчас реально хранится в БД: "чоловік👨" / "жінка👩"
+    if v in {"чоловік👨", "чоловік", "ч", "m", "male", "man 👨", "man"}:
+        return pick_lang(lang, "чоловік👨", "man 👨")
+    if v in {"жінка👩", "жінка", "ж", "f", "female", "woman 👩", "woman"}:
+        return pick_lang(lang, "жінка👩", "woman 👩")
+
+    # fallback: если вдруг уже "male"/"female"
+    if v == "male":
+        return pick_lang(lang, "чоловік👨", "man 👨")
+    if v == "female":
+        return pick_lang(lang, "жінка👩", "woman 👩")
+
+    # совсем неожиданный формат — просто показываем как есть
+    return str(gender_value)
+
+
 def toggle_user_language(user_id: int) -> str:
     current = get_user_language(user_id)
     next_lang = "en" if current == "uk" else "uk"
@@ -1293,7 +1312,8 @@ async def profile(message: Message):
     if show_height:
         profile_lines.append(pick_lang(lang, f"📏 Зріст: {h} см", f"📏 Height: {h} cm"))
     if show_gender:
-        profile_lines.append(pick_lang(lang, f"🧍 Стать: {g}", f"🧍 Gender: {g}"))
+        gd = gender_display(lang, g)
+        profile_lines.append(pick_lang(lang, f"🧍 Стать: {gd}", f"🧍 Gender: {gd}"))
     if show_age:
         profile_lines.append(pick_lang(lang, f"🎂 Вік: {age_text}", f"🎂 Age: {age_text}"))
     if show_weight:
