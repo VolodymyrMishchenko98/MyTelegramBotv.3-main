@@ -71,28 +71,23 @@ def challenge_keyboard(lang: str) -> InlineKeyboardMarkup:
     ]])
 
 
-def daily_task_keyboard(lang: str, task: dict, completed: bool) -> InlineKeyboardMarkup:
+def daily_task_keyboard(lang: str, task: dict, completed: bool, date_text: str = None) -> InlineKeyboardMarkup:
+    date_text = date_text or datetime.now().strftime("%Y-%m-%d")
     if completed:
         return InlineKeyboardMarkup(inline_keyboard=[[
             InlineKeyboardButton(
                 text=pick_lang(lang, "✅ Виконано", "✅ Completed"),
-                callback_data="daily_done"
+                callback_data=f"daily_done_{date_text}"
             )
         ]])
 
     unit = pick_lang(lang, task["uk_unit"], task["en_unit"])
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text=f"+{task['step']} {unit}",
-                callback_data="daily_add"
-            ),
-            InlineKeyboardButton(
-                text=pick_lang(lang, "✅ Завершити", "✅ Finish"),
-                callback_data="daily_finish"
-            )
-        ]
-    ])
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(
+            text=f"+{task['step']} {unit}",
+            callback_data=f"daily_add_{date_text}"
+        )
+    ]])
 
 
 def shop_keyboard(lang: str) -> InlineKeyboardMarkup:
@@ -630,6 +625,24 @@ def init_db():
                 )
                 """)
 
+    cur.execute("""
+                CREATE TABLE IF NOT EXISTS coin_rewards
+                (
+                    user_id
+                    INTEGER,
+                    date
+                    TEXT,
+                    source
+                    TEXT,
+                    amount
+                    INTEGER,
+                    created_at
+                    TEXT,
+                    PRIMARY KEY
+                    (user_id, date, source)
+                )
+                """)
+
     db.commit()
     db.close()
 
@@ -755,22 +768,96 @@ def add_coins(user_id: int, amount: int) -> int:
     return int(balance)
 
 
+def claim_daily_coin_reward(user_id: int, source: str, amount: int):
+    ensure_user(user_id)
+    today = datetime.now().strftime("%Y-%m-%d")
+    db = get_db()
+    cur = db.cursor()
+    try:
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO coin_rewards (user_id, date, source, amount, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (user_id, today, source, amount, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        awarded = cur.rowcount == 1
+        if awarded:
+            cur.execute(
+                "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
+                (amount, user_id)
+            )
+        cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+        balance = int((cur.fetchone() or [0])[0] or 0)
+        db.commit()
+        return awarded, balance
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def spend_coins(user_id: int, amount: int):
     ensure_user(user_id)
     db = get_db()
     cur = db.cursor()
-    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-    balance = int((cur.fetchone() or [0])[0] or 0)
-
-    if balance < amount:
+    try:
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            UPDATE users
+            SET coin_balance = COALESCE(coin_balance, 0) - ?
+            WHERE user_id=? AND COALESCE(coin_balance, 0) >= ?
+            """,
+            (amount, user_id, amount)
+        )
+        paid = cur.rowcount == 1
+        cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+        balance = int((cur.fetchone() or [0])[0] or 0)
+        db.commit()
+        return paid, balance
+    except Exception:
+        db.rollback()
+        raise
+    finally:
         db.close()
-        return False, balance
 
-    balance -= amount
-    cur.execute("UPDATE users SET coin_balance=? WHERE user_id=?", (balance, user_id))
-    db.commit()
-    db.close()
-    return True, balance
+
+def buy_shop_item(user_id: int, item_id: str, cost: int):
+    ensure_user(user_id)
+    db = get_db()
+    cur = db.cursor()
+    try:
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            UPDATE users
+            SET coin_balance = COALESCE(coin_balance, 0) - ?
+            WHERE user_id=? AND COALESCE(coin_balance, 0) >= ?
+            """,
+            (cost, user_id, cost)
+        )
+        if cur.rowcount != 1:
+            cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+            balance = int((cur.fetchone() or [0])[0] or 0)
+            db.commit()
+            return False, balance
+
+        cur.execute(
+            "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
+            (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        )
+        cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+        balance = int((cur.fetchone() or [0])[0] or 0)
+        db.commit()
+        return True, balance
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def add_user_item(user_id: int, item_id: str):
@@ -900,33 +987,57 @@ def build_daily_task_text(lang: str, task: dict, progress: int, completed: bool)
     )
 
 
-def update_daily_progress(user_id: int, mode: str):
+def update_daily_progress(user_id: int):
     today, task_id, task, progress, completed = get_or_create_daily_task(user_id)
 
     if completed:
         return task, progress, True, False, get_coin_balance(user_id)
 
-    if mode == "finish":
-        progress = task["target"]
-    else:
-        progress = min(progress + task["step"], task["target"])
+    new_progress = min(progress + task["step"], task["target"])
+    completed_now = new_progress >= task["target"]
 
-    completed_now = progress >= task["target"]
     balance = get_coin_balance(user_id)
-
+    rewarded = False
     db = get_db()
     cur = db.cursor()
-    cur.execute(
-        "UPDATE daily_tasks SET progress=?, completed=? WHERE user_id=? AND date=?",
-        (progress, 1 if completed_now else 0, user_id, today)
-    )
-    db.commit()
-    db.close()
+    try:
+        cur.execute("BEGIN IMMEDIATE")
+        cur.execute(
+            """
+            UPDATE daily_tasks
+            SET progress=?, completed=?
+            WHERE user_id=? AND date=? AND completed=0
+            """,
+            (new_progress, 1 if completed_now else 0, user_id, today)
+        )
+        changed = cur.rowcount
+        if changed and completed_now:
+            cur.execute(
+                """
+                INSERT OR IGNORE INTO coin_rewards (user_id, date, source, amount, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (user_id, today, "daily", task["reward"], datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            rewarded = cur.rowcount == 1
+        if rewarded:
+            cur.execute(
+                "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
+                (task["reward"], user_id)
+            )
+            cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+            balance = int((cur.fetchone() or [0])[0] or 0)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
-    if completed_now:
-        balance = add_coins(user_id, task["reward"])
+    if not changed:
+        return task, progress, True, False, get_coin_balance(user_id)
 
-    return task, progress, completed_now, completed_now, balance
+    return task, new_progress, completed_now, rewarded, balance
 
 
 def parse_activity_and_duration(text: str):
@@ -1043,6 +1154,7 @@ async def reset_yes(callback: CallbackQuery):
     cur.execute("DELETE FROM weights WHERE user_id=?", (uid,))
     cur.execute("DELETE FROM user_items WHERE user_id=?", (uid,))
     cur.execute("DELETE FROM daily_tasks WHERE user_id=?", (uid,))
+    cur.execute("DELETE FROM coin_rewards WHERE user_id=?", (uid,))
     cur.execute("DELETE FROM users WHERE user_id=?", (uid,))
 
     db.commit()
@@ -1277,7 +1389,7 @@ async def goal(message: Message):
 async def daily(message: Message):
     uid = message.from_user.id
     lang = get_user_language(uid)
-    _, _, task, progress, completed = get_or_create_daily_task(uid)
+    date_text, _, task, progress, completed = get_or_create_daily_task(uid)
 
     await message.answer(
         style_block(
@@ -1286,21 +1398,37 @@ async def daily(message: Message):
             icon="🎮"
         ),
         parse_mode="HTML",
-        reply_markup=daily_task_keyboard(lang, task, completed)
+        reply_markup=daily_task_keyboard(lang, task, completed, date_text)
     )
 
 
-@dp.callback_query(lambda c: c.data in ("daily_add", "daily_finish", "daily_done"))
+@dp.callback_query(lambda c: c.data and c.data.startswith("daily_"))
 async def daily_progress(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = get_user_language(uid)
+    today = datetime.now().strftime("%Y-%m-%d")
+    callback_date = None
 
-    if callback.data == "daily_done":
+    if callback.data.startswith("daily_add_"):
+        callback_date = callback.data.replace("daily_add_", "", 1)
+    elif callback.data.startswith("daily_done_"):
+        callback_date = callback.data.replace("daily_done_", "", 1)
+    elif callback.data.startswith("daily_finish_"):
+        callback_date = callback.data.replace("daily_finish_", "", 1)
+
+    if callback_date and callback_date != today:
+        await callback.answer(
+            pick_lang(lang, "Це старе завдання. Відкрий /daily", "This is an old task. Open /daily"),
+            show_alert=True
+        )
+        return
+
+    if callback.data.startswith("daily_done"):
         await callback.answer(pick_lang(lang, "Завдання вже виконано", "Task already completed"))
         return
 
-    mode = "finish" if callback.data == "daily_finish" else "add"
-    task, progress, completed, rewarded, balance = update_daily_progress(uid, mode)
+    date_text, _, _, _, _ = get_or_create_daily_task(uid)
+    task, progress, completed, rewarded, balance = update_daily_progress(uid)
 
     text = build_daily_task_text(lang, task, progress, completed)
     if rewarded:
@@ -1317,7 +1445,7 @@ async def daily_progress(callback: CallbackQuery):
             icon="🎮"
         ),
         parse_mode="HTML",
-        reply_markup=daily_task_keyboard(lang, task, completed)
+        reply_markup=daily_task_keyboard(lang, task, completed, date_text)
     )
 
     if rewarded:
@@ -1394,7 +1522,7 @@ async def shop_buy(callback: CallbackQuery):
         await callback.answer(pick_lang(lang, "Товар не знайдено", "Item not found"), show_alert=True)
         return
 
-    paid, balance = spend_coins(uid, item["cost"])
+    paid, balance = buy_shop_item(uid, item_id, item["cost"])
     if not paid:
         await callback.answer(
             pick_lang(
@@ -1406,7 +1534,6 @@ async def shop_buy(callback: CallbackQuery):
         )
         return
 
-    add_user_item(uid, item_id)
     item_name = pick_lang(lang, item["uk_name"], item["en_name"])
 
     if item_id == "power_plan":
@@ -1648,14 +1775,14 @@ async def suggest_done(callback: CallbackQuery):
     db.close()
 
     reward = SUGGESTED_WORKOUT_REWARD if saved_count else 0
-    balance = add_coins(uid, reward) if reward else get_coin_balance(uid)
+    rewarded, balance = claim_daily_coin_reward(uid, "suggest", reward) if reward else (False, get_coin_balance(uid))
 
     await callback.message.edit_text(
         callback.message.text
         + pick_lang(lang, "\n\n✅ Тренування збережено", "\n\n✅ Workout saved")
-        + (format_coin_reward(lang, reward, balance) if reward else "")
+        + (format_coin_reward(lang, reward, balance) if rewarded else "")
     )
-    await callback.answer(pick_lang(lang, f"+{reward} монет", f"+{reward} coins") if reward else pick_lang(lang, "ОК", "OK"))
+    await callback.answer(pick_lang(lang, f"+{reward} монет", f"+{reward} coins") if rewarded else pick_lang(lang, "ОК", "OK"))
 
 
 @dp.callback_query(F.data == "challenge_next")
@@ -1677,7 +1804,7 @@ async def challenge_done(callback: CallbackQuery):
     today = datetime.now().strftime("%Y-%m-%d")
     
     # Extract challenge text from the message (it's between 🔥 markers)
-    message_text = callback.message.text
+    message_text = callback.message.text or ""
     # Find the challenge text that starts with 🔥
     lines = message_text.split("\n")
     challenge_text = None
@@ -1707,15 +1834,18 @@ async def challenge_done(callback: CallbackQuery):
     db.commit()
     db.close()
 
-    balance = add_coins(uid, CHALLENGE_COIN_REWARD)
+    rewarded, balance = claim_daily_coin_reward(uid, "challenge", CHALLENGE_COIN_REWARD)
 
     await callback.message.edit_text(
         callback.message.text
         + pick_lang(lang, "\n\n✅ Челендж зараховано!", "\n\n✅ Challenge counted!")
-        + format_coin_reward(lang, CHALLENGE_COIN_REWARD, balance),
+        + (format_coin_reward(lang, CHALLENGE_COIN_REWARD, balance) if rewarded else ""),
         parse_mode="HTML"
     )
-    await callback.answer(pick_lang(lang, f"+{CHALLENGE_COIN_REWARD} монет", f"+{CHALLENGE_COIN_REWARD} coins"))
+    await callback.answer(
+        pick_lang(lang, f"+{CHALLENGE_COIN_REWARD} монет", f"+{CHALLENGE_COIN_REWARD} coins")
+        if rewarded else pick_lang(lang, "Зараховано", "Counted")
+    )
 
 
 @dp.message(Command("workout"))
@@ -1981,6 +2111,16 @@ async def handle_input(message: Message):
     # WORKOUT
     if state == "workout":
         exercises = [x.strip() for x in message.text.split(",") if x.strip()]
+        if not exercises:
+            await message.answer(
+                pick_lang(
+                    lang,
+                    "Введи хоча б одну вправу.",
+                    "Enter at least one exercise."
+                )
+            )
+            return
+
         db = get_db()
         cur = db.cursor()
 
@@ -1994,13 +2134,18 @@ async def handle_input(message: Message):
         db.close()
 
         reward = min(len(exercises) * WORKOUT_COIN_REWARD, 50)
-        balance = add_coins(uid, reward) if reward else get_coin_balance(uid)
+        rewarded, balance = claim_daily_coin_reward(uid, "workout", reward) if reward else (False, get_coin_balance(uid))
+        reward_text = (
+            pick_lang(lang, f"\n🪙 +{reward} монет\nБаланс: {balance}", f"\n🪙 +{reward} coins\nBalance: {balance}")
+            if rewarded else
+            pick_lang(lang, f"\n🪙 Нагорода за /workout сьогодні вже отримана\nБаланс: {balance}", f"\n🪙 Today's /workout reward is already claimed\nBalance: {balance}")
+        )
 
         await message.answer(
             pick_lang(
                 lang,
-                f"Збережено: {len(exercises)}\n🪙 +{reward} монет\nБаланс: {balance}",
-                f"Saved: {len(exercises)}\n🪙 +{reward} coins\nBalance: {balance}"
+                f"Збережено: {len(exercises)}{reward_text}",
+                f"Saved: {len(exercises)}{reward_text}"
             )
         )
         clear_user_state(uid)
