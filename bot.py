@@ -274,6 +274,13 @@ def pick_lang(lang: str, uk: str, en: str) -> str:
     return en if lang == "en" else uk
 
 
+def toggle_user_language(user_id: int) -> str:
+    current = get_user_language(user_id)
+    next_lang = "en" if current == "uk" else "uk"
+    set_user_language(user_id, next_lang)
+    return next_lang
+
+
 def style_block(title: str, body: str, icon: str = "✨") -> str:
     safe_title = html.escape(title)
     safe_body = html.escape(body.strip())
@@ -1231,7 +1238,16 @@ async def start(message: Message):
 
 @dp.message(Command("set_language"))
 async def set_language_command(message: Message):
-    await message.answer("Choose language / Оберіть мову", reply_markup=language_kb)
+    uid = message.from_user.id
+
+    # Требование: любой вызов /set_language должен переключать UA <-> EN
+    lang = toggle_user_language(uid)
+
+    await message.answer(
+        build_start_text(lang),
+        parse_mode="HTML",
+        reply_markup=language_kb
+    )
 
 
 @dp.callback_query(lambda c: c.data in ("set_lang_en", "set_lang_uk"))
