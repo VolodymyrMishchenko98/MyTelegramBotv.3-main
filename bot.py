@@ -2146,6 +2146,7 @@ async def handle_input(message: Message):
             clear_user_state(uid)
         except:
             await message.answer(pick_lang(lang, "Формат: 165, ч, 25, мета", "Format: 165, m, 25, goal"))
+        return
 
     # WORKOUT
     if state == "workout":
@@ -2188,6 +2189,7 @@ async def handle_input(message: Message):
             )
         )
         clear_user_state(uid)
+        return
 
 
 # ---------- RUN ----------
