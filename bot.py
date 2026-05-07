@@ -732,6 +732,48 @@ def get_profile_visibility(user_id: int) -> dict:
     }
 
 
+def get_user_profile(user_id: int):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        """
+        SELECT height, gender, age, goal, current_weight,
+               show_height, show_gender, show_age, show_weight, show_goal
+        FROM users
+        WHERE user_id=?
+        """,
+        (user_id,)
+    )
+    row = cur.fetchone()
+    db.close()
+
+    if not row:
+        return None
+
+    return {
+        "height": row[0],
+        "gender": row[1],
+        "age": row[2],
+        "goal": row[3],
+        "current_weight": row[4],
+        "show_height": bool(row[5]) if row[5] is not None else True,
+        "show_gender": bool(row[6]) if row[6] is not None else True,
+        "show_age": bool(row[7]) if row[7] is not None else True,
+        "show_weight": bool(row[8]) if row[8] is not None else True,
+        "show_goal": bool(row[9]) if row[9] is not None else True,
+    }
+
+
+def is_profile_complete(profile) -> bool:
+    if not profile:
+        return False
+    return bool(
+        profile.get("height") and
+        profile.get("gender") and
+        profile.get("goal")
+    )
+
+
 def ensure_user(user_id: int):
     db = get_db()
     cur = db.cursor()
@@ -1204,22 +1246,9 @@ async def set_language(callback: CallbackQuery):
 async def profile(message: Message):
     uid = message.from_user.id
     lang = get_user_language(uid)
-    db = get_db()
-    cur = db.cursor()
+    profile_data = get_user_profile(uid)
 
-    cur.execute(
-        """
-        SELECT height, gender, age, goal, current_weight,
-               show_height, show_gender, show_age, show_weight, show_goal
-        FROM users
-        WHERE user_id=?
-        """,
-        (uid,)
-    )
-    profile_row = cur.fetchone()
-    db.close()
-
-    if not profile_row or not profile_row[0]:
+    if not is_profile_complete(profile_data):
         set_user_state(uid, "profile")
         await message.answer(
             pick_lang(
@@ -1230,7 +1259,17 @@ async def profile(message: Message):
         )
         return
 
-    h, g, age, goal, current_weight, show_height, show_gender, show_age, show_weight, show_goal = profile_row
+    h = profile_data["height"]
+    g = profile_data["gender"]
+    age = profile_data["age"]
+    goal = profile_data["goal"]
+    current_weight = profile_data["current_weight"]
+    show_height = profile_data["show_height"]
+    show_gender = profile_data["show_gender"]
+    show_age = profile_data["show_age"]
+    show_weight = profile_data["show_weight"]
+    show_goal = profile_data["show_goal"]
+
     weight_text = f"{current_weight:.1f} кг" if current_weight and current_weight > 0 else pick_lang(lang, "не вказана", "not set")
     age_text = str(age) if age else pick_lang(lang, "не вказаний", "not set")
 
