@@ -71,6 +71,42 @@ def challenge_keyboard(lang: str) -> InlineKeyboardMarkup:
     ]])
 
 
+def daily_task_keyboard(lang: str, task: dict, completed: bool) -> InlineKeyboardMarkup:
+    if completed:
+        return InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text=pick_lang(lang, "✅ Виконано", "✅ Completed"),
+                callback_data="daily_done"
+            )
+        ]])
+
+    unit = pick_lang(lang, task["uk_unit"], task["en_unit"])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text=f"+{task['step']} {unit}",
+                callback_data="daily_add"
+            ),
+            InlineKeyboardButton(
+                text=pick_lang(lang, "✅ Завершити", "✅ Finish"),
+                callback_data="daily_finish"
+            )
+        ]
+    ])
+
+
+def shop_keyboard(lang: str) -> InlineKeyboardMarkup:
+    rows = []
+    for item_id, item in SHOP_ITEMS.items():
+        rows.append([
+            InlineKeyboardButton(
+                text=f"🪙 {item['cost']} · {pick_lang(lang, item['uk_name'], item['en_name'])}",
+                callback_data=f"shop_buy_{item_id}"
+            )
+        ])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 PROFILE_FIELDS = (
     ("height", "Зріст", "Height"),
     ("gender", "Стать", "Gender"),
@@ -78,6 +114,103 @@ PROFILE_FIELDS = (
     ("weight", "Вага", "Weight"),
     ("goal", "Мета", "Goal"),
 )
+
+SHOP_ITEMS = {
+    "power_plan": {
+        "cost": 60,
+        "uk_name": "Преміум тренування",
+        "en_name": "Premium workout",
+        "uk_desc": "Отримай випадкове посилене тренування.",
+        "en_desc": "Get a random stronger workout.",
+    },
+    "motivation_pack": {
+        "cost": 35,
+        "uk_name": "Пак мотивації",
+        "en_name": "Motivation pack",
+        "uk_desc": "Три мотиваційні фрази одним повідомленням.",
+        "en_desc": "Three motivational quotes in one message.",
+    },
+    "rest_badge": {
+        "cost": 80,
+        "uk_name": "Бейдж відновлення",
+        "en_name": "Recovery badge",
+        "uk_desc": "Колекційний бейдж для балансу.",
+        "en_desc": "A collectible badge for your wallet.",
+    },
+}
+
+DAILY_TASKS = {
+    "squats_100": {
+        "target": 100,
+        "step": 25,
+        "reward": 45,
+        "uk_name": "100 присідань",
+        "en_name": "100 squats",
+        "uk_unit": "присідань",
+        "en_unit": "squats",
+        "uk_hint": "Розбий на 4 підходи по 25. Темп спокійний, коліна не заводь всередину.",
+        "en_hint": "Split it into 4 sets of 25. Keep a steady pace and knees tracking well.",
+    },
+    "pushups_60": {
+        "target": 60,
+        "step": 15,
+        "reward": 45,
+        "uk_name": "60 відтискувань",
+        "en_name": "60 push ups",
+        "uk_unit": "відтискувань",
+        "en_unit": "push ups",
+        "uk_hint": "Можна робити з колін або частинами протягом дня.",
+        "en_hint": "Knee push ups count too, and you can split them through the day.",
+    },
+    "plank_180": {
+        "target": 180,
+        "step": 30,
+        "reward": 50,
+        "uk_name": "Планка 180 секунд",
+        "en_name": "180 sec plank",
+        "uk_unit": "сек",
+        "en_unit": "sec",
+        "uk_hint": "Наприклад 6 підходів по 30 секунд або 3 по 60.",
+        "en_hint": "For example, 6 sets of 30 seconds or 3 sets of 60.",
+    },
+    "walk_45": {
+        "target": 45,
+        "step": 15,
+        "reward": 45,
+        "uk_name": "45 хвилин швидкої ходьби",
+        "en_name": "45 min brisk walk",
+        "uk_unit": "хв",
+        "en_unit": "min",
+        "uk_hint": "Підійде активна прогулянка, де дихання стає трохи частішим.",
+        "en_hint": "A brisk walk counts when your breathing gets a little faster.",
+    },
+    "lunges_80": {
+        "target": 80,
+        "step": 20,
+        "reward": 45,
+        "uk_name": "80 випадів",
+        "en_name": "80 lunges",
+        "uk_unit": "випадів",
+        "en_unit": "lunges",
+        "uk_hint": "Рахуй обидві ноги разом. Тримай корпус рівно.",
+        "en_hint": "Count both legs together. Keep your torso steady.",
+    },
+    "core_120": {
+        "target": 120,
+        "step": 30,
+        "reward": 45,
+        "uk_name": "120 скручувань на прес",
+        "en_name": "120 sit ups",
+        "uk_unit": "разів",
+        "en_unit": "reps",
+        "uk_hint": "Роби короткими підходами, без ривків шиєю.",
+        "en_hint": "Use short sets and avoid pulling your neck.",
+    },
+}
+
+WORKOUT_COIN_REWARD = 10
+SUGGESTED_WORKOUT_REWARD = 25
+CHALLENGE_COIN_REWARD = 35
 
 
 def profile_visibility_keyboard(lang: str, visibility: dict) -> InlineKeyboardMarkup:
@@ -173,6 +306,9 @@ def build_start_text(lang: str) -> str:
         "/set_language — змінити мову\n"
         "/reminders — нагадування\n"
         "/goal — показати мету на тиждень\n"
+        "/daily — щоденне завдання\n"
+        "/wallet — баланс монет\n"
+        "/shop — магазин\n"
         "/motivate — мотивація\n"
         "/tip — корисна порада\n"
         "/challenge — челендж дня",
@@ -190,6 +326,9 @@ def build_start_text(lang: str) -> str:
         "/set_language — change language\n"
         "/reminders — reminders\n"
         "/goal — show weekly goal\n"
+        "/daily — daily task\n"
+        "/wallet — coin balance\n"
+        "/shop — shop\n"
         "/motivate — motivation\n"
         "/tip — health tip\n"
         "/challenge — challenge of the day"
@@ -384,6 +523,8 @@ def init_db():
         cur.execute("ALTER TABLE users ADD COLUMN language TEXT DEFAULT 'uk'")
     if 'age' not in columns:
         cur.execute("ALTER TABLE users ADD COLUMN age INTEGER")
+    if 'coin_balance' not in columns:
+        cur.execute("ALTER TABLE users ADD COLUMN coin_balance INTEGER DEFAULT 0")
     for column_name in (
         'show_height',
         'show_gender',
@@ -447,6 +588,45 @@ def init_db():
                     KEY,
                     state
                     TEXT
+                )
+                """)
+
+    cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_items
+                (
+                    id
+                    INTEGER
+                    PRIMARY
+                    KEY
+                    AUTOINCREMENT,
+                    user_id
+                    INTEGER,
+                    item_id
+                    TEXT,
+                    purchased_at
+                    TEXT
+                )
+                """)
+
+    cur.execute("""
+                CREATE TABLE IF NOT EXISTS daily_tasks
+                (
+                    user_id
+                    INTEGER,
+                    date
+                    TEXT,
+                    task_id
+                    TEXT,
+                    progress
+                    INTEGER
+                    DEFAULT
+                    0,
+                    completed
+                    INTEGER
+                    DEFAULT
+                    0,
+                    PRIMARY KEY
+                    (user_id, date)
                 )
                 """)
 
@@ -548,6 +728,205 @@ def ensure_user(user_id: int):
     )
     db.commit()
     db.close()
+
+
+def get_coin_balance(user_id: int) -> int:
+    ensure_user(user_id)
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+    row = cur.fetchone()
+    db.close()
+    return int(row[0] or 0) if row else 0
+
+
+def add_coins(user_id: int, amount: int) -> int:
+    ensure_user(user_id)
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
+        (amount, user_id)
+    )
+    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+    balance = cur.fetchone()[0] or 0
+    db.commit()
+    db.close()
+    return int(balance)
+
+
+def spend_coins(user_id: int, amount: int):
+    ensure_user(user_id)
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+    balance = int((cur.fetchone() or [0])[0] or 0)
+
+    if balance < amount:
+        db.close()
+        return False, balance
+
+    balance -= amount
+    cur.execute("UPDATE users SET coin_balance=? WHERE user_id=?", (balance, user_id))
+    db.commit()
+    db.close()
+    return True, balance
+
+
+def add_user_item(user_id: int, item_id: str):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
+        (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    )
+    db.commit()
+    db.close()
+
+
+def get_user_items(user_id: int) -> dict:
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "SELECT item_id, COUNT(*) FROM user_items WHERE user_id=? GROUP BY item_id",
+        (user_id,)
+    )
+    rows = cur.fetchall()
+    db.close()
+    return {item_id: count for item_id, count in rows}
+
+
+def format_coin_reward(lang: str, amount: int, balance: int) -> str:
+    return pick_lang(
+        lang,
+        f"\n\n🪙 +{amount} монет\nБаланс: {balance}",
+        f"\n\n🪙 +{amount} coins\nBalance: {balance}"
+    )
+
+
+def get_premium_workout(lang: str) -> str:
+    workouts = [
+        (
+            "⚡ Преміум тренування:\n"
+            "• Розминка 5 хв\n"
+            "• Присідання 4x20\n"
+            "• Відтискування 4x12\n"
+            "• Альпініст 3x40 сек\n"
+            "• Планка 3x45 сек",
+            "⚡ Premium workout:\n"
+            "• Warm-up 5 min\n"
+            "• Squats 4x20\n"
+            "• Push ups 4x12\n"
+            "• Mountain climbers 3x40 sec\n"
+            "• Plank 3x45 sec",
+        ),
+        (
+            "⚡ Преміум тренування:\n"
+            "• Швидкий крок 10 хв\n"
+            "• Випади 4x12\n"
+            "• Скручування 3x20\n"
+            "• Бьорпі 3x10\n"
+            "• Розтяжка 5 хв",
+            "⚡ Premium workout:\n"
+            "• Fast walk 10 min\n"
+            "• Lunges 4x12\n"
+            "• Sit ups 3x20\n"
+            "• Burpees 3x10\n"
+            "• Stretch 5 min",
+        ),
+    ]
+    return get_localized_choice(lang, workouts)
+
+
+def choose_daily_task_id(user_id: int, date_text: str) -> str:
+    task_ids = list(DAILY_TASKS.keys())
+    rng = random.Random(f"{user_id}:{date_text}")
+    return rng.choice(task_ids)
+
+
+def get_or_create_daily_task(user_id: int):
+    ensure_user(user_id)
+    today = datetime.now().strftime("%Y-%m-%d")
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "SELECT task_id, progress, completed FROM daily_tasks WHERE user_id=? AND date=?",
+        (user_id, today)
+    )
+    row = cur.fetchone()
+
+    if not row:
+        task_id = choose_daily_task_id(user_id, today)
+        cur.execute(
+            "INSERT INTO daily_tasks (user_id, date, task_id, progress, completed) VALUES (?, ?, ?, 0, 0)",
+            (user_id, today, task_id)
+        )
+        db.commit()
+        row = (task_id, 0, 0)
+
+    db.close()
+    task_id, progress, completed = row
+    task = DAILY_TASKS.get(task_id, DAILY_TASKS["squats_100"])
+    return today, task_id, task, int(progress or 0), bool(completed)
+
+
+def build_progress_bar(progress: int, target: int) -> tuple[str, int]:
+    percent = min(int(progress / target * 100), 100) if target else 0
+    filled = min(percent // 10, 10)
+    return "█" * filled + "░" * (10 - filled), percent
+
+
+def build_daily_task_text(lang: str, task: dict, progress: int, completed: bool) -> str:
+    target = task["target"]
+    progress = min(progress, target)
+    bar, percent = build_progress_bar(progress, target)
+    unit = pick_lang(lang, task["uk_unit"], task["en_unit"])
+    status = pick_lang(lang, "✅ Завершено", "✅ Completed") if completed else pick_lang(lang, "⏳ В процесі", "⏳ In progress")
+
+    return pick_lang(
+        lang,
+        f"🎯 Завдання: {task['uk_name']}\n"
+        f"📈 Прогрес: {progress}/{target} {unit}\n"
+        f"{bar} {percent}%\n"
+        f"🪙 Нагорода: {task['reward']} монет\n"
+        f"📌 {task['uk_hint']}\n\n"
+        f"{status}",
+        f"🎯 Task: {task['en_name']}\n"
+        f"📈 Progress: {progress}/{target} {unit}\n"
+        f"{bar} {percent}%\n"
+        f"🪙 Reward: {task['reward']} coins\n"
+        f"📌 {task['en_hint']}\n\n"
+        f"{status}"
+    )
+
+
+def update_daily_progress(user_id: int, mode: str):
+    today, task_id, task, progress, completed = get_or_create_daily_task(user_id)
+
+    if completed:
+        return task, progress, True, False, get_coin_balance(user_id)
+
+    if mode == "finish":
+        progress = task["target"]
+    else:
+        progress = min(progress + task["step"], task["target"])
+
+    completed_now = progress >= task["target"]
+    balance = get_coin_balance(user_id)
+
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "UPDATE daily_tasks SET progress=?, completed=? WHERE user_id=? AND date=?",
+        (progress, 1 if completed_now else 0, user_id, today)
+    )
+    db.commit()
+    db.close()
+
+    if completed_now:
+        balance = add_coins(user_id, task["reward"])
+
+    return task, progress, completed_now, completed_now, balance
 
 
 def parse_activity_and_duration(text: str):
@@ -662,6 +1041,8 @@ async def reset_yes(callback: CallbackQuery):
 
     cur.execute("DELETE FROM workouts WHERE user_id=?", (uid,))
     cur.execute("DELETE FROM weights WHERE user_id=?", (uid,))
+    cur.execute("DELETE FROM user_items WHERE user_id=?", (uid,))
+    cur.execute("DELETE FROM daily_tasks WHERE user_id=?", (uid,))
     cur.execute("DELETE FROM users WHERE user_id=?", (uid,))
 
     db.commit()
@@ -892,6 +1273,169 @@ async def goal(message: Message):
     )
 
 
+@dp.message(Command("daily"))
+async def daily(message: Message):
+    uid = message.from_user.id
+    lang = get_user_language(uid)
+    _, _, task, progress, completed = get_or_create_daily_task(uid)
+
+    await message.answer(
+        style_block(
+            pick_lang(lang, "Щоденне завдання", "Daily task"),
+            build_daily_task_text(lang, task, progress, completed),
+            icon="🎮"
+        ),
+        parse_mode="HTML",
+        reply_markup=daily_task_keyboard(lang, task, completed)
+    )
+
+
+@dp.callback_query(lambda c: c.data in ("daily_add", "daily_finish", "daily_done"))
+async def daily_progress(callback: CallbackQuery):
+    uid = callback.from_user.id
+    lang = get_user_language(uid)
+
+    if callback.data == "daily_done":
+        await callback.answer(pick_lang(lang, "Завдання вже виконано", "Task already completed"))
+        return
+
+    mode = "finish" if callback.data == "daily_finish" else "add"
+    task, progress, completed, rewarded, balance = update_daily_progress(uid, mode)
+
+    text = build_daily_task_text(lang, task, progress, completed)
+    if rewarded:
+        text += pick_lang(
+            lang,
+            f"\n\n🪙 +{task['reward']} монет\nБаланс: {balance}",
+            f"\n\n🪙 +{task['reward']} coins\nBalance: {balance}"
+        )
+
+    await callback.message.edit_text(
+        style_block(
+            pick_lang(lang, "Щоденне завдання", "Daily task"),
+            text,
+            icon="🎮"
+        ),
+        parse_mode="HTML",
+        reply_markup=daily_task_keyboard(lang, task, completed)
+    )
+
+    if rewarded:
+        await callback.answer(pick_lang(lang, f"+{task['reward']} монет", f"+{task['reward']} coins"))
+    else:
+        await callback.answer(pick_lang(lang, "Прогрес оновлено", "Progress updated"))
+
+
+@dp.message(Command("wallet"))
+async def wallet(message: Message):
+    uid = message.from_user.id
+    lang = get_user_language(uid)
+    balance = get_coin_balance(uid)
+    items = get_user_items(uid)
+
+    if items:
+        item_lines = []
+        for item_id, count in items.items():
+            item = SHOP_ITEMS.get(item_id)
+            if item:
+                item_lines.append(f"• {pick_lang(lang, item['uk_name'], item['en_name'])}: {count}")
+        inventory = "\n".join(item_lines)
+    else:
+        inventory = pick_lang(lang, "Покупок ще немає.", "No purchases yet.")
+
+    await message.answer(
+        style_block(
+            pick_lang(lang, "Гаманець", "Wallet"),
+            pick_lang(
+                lang,
+                f"🪙 Баланс: {balance}\n\n🎒 Покупки:\n{inventory}\n\nМагазин: /shop",
+                f"🪙 Balance: {balance}\n\n🎒 Purchases:\n{inventory}\n\nShop: /shop"
+            ),
+            icon="💰"
+        ),
+        parse_mode="HTML"
+    )
+
+
+@dp.message(Command("shop"))
+async def shop(message: Message):
+    lang = get_user_language(message.from_user.id)
+    balance = get_coin_balance(message.from_user.id)
+    lines = [pick_lang(lang, f"Баланс: {balance} монет", f"Balance: {balance} coins")]
+
+    for item in SHOP_ITEMS.values():
+        lines.append(
+            pick_lang(
+                lang,
+                f"🪙 {item['cost']} — {item['uk_name']}\n{item['uk_desc']}",
+                f"🪙 {item['cost']} — {item['en_name']}\n{item['en_desc']}"
+            )
+        )
+
+    await message.answer(
+        style_block(
+            pick_lang(lang, "Магазин", "Shop"),
+            "\n\n".join(lines),
+            icon="🛒"
+        ),
+        parse_mode="HTML",
+        reply_markup=shop_keyboard(lang)
+    )
+
+
+@dp.callback_query(F.data.startswith("shop_buy_"))
+async def shop_buy(callback: CallbackQuery):
+    uid = callback.from_user.id
+    lang = get_user_language(uid)
+    item_id = callback.data.replace("shop_buy_", "", 1)
+    item = SHOP_ITEMS.get(item_id)
+
+    if not item:
+        await callback.answer(pick_lang(lang, "Товар не знайдено", "Item not found"), show_alert=True)
+        return
+
+    paid, balance = spend_coins(uid, item["cost"])
+    if not paid:
+        await callback.answer(
+            pick_lang(
+                lang,
+                f"Не вистачає монет. Баланс: {balance}",
+                f"Not enough coins. Balance: {balance}"
+            ),
+            show_alert=True
+        )
+        return
+
+    add_user_item(uid, item_id)
+    item_name = pick_lang(lang, item["uk_name"], item["en_name"])
+
+    if item_id == "power_plan":
+        body = pick_lang(
+            lang,
+            f"Куплено: {item_name}\nБаланс: {balance}\n\n{get_premium_workout(lang)}",
+            f"Purchased: {item_name}\nBalance: {balance}\n\n{get_premium_workout(lang)}"
+        )
+    elif item_id == "motivation_pack":
+        quotes = "\n".join(f"• {get_motivation_quote(lang)}" for _ in range(3))
+        body = pick_lang(
+            lang,
+            f"Куплено: {item_name}\nБаланс: {balance}\n\n{quotes}",
+            f"Purchased: {item_name}\nBalance: {balance}\n\n{quotes}"
+        )
+    else:
+        body = pick_lang(
+            lang,
+            f"Куплено: {item_name}\nБаланс: {balance}\nБейдж додано в /wallet.",
+            f"Purchased: {item_name}\nBalance: {balance}\nBadge added to /wallet."
+        )
+
+    await callback.message.answer(
+        style_block(pick_lang(lang, "Покупка", "Purchase"), body, icon="✅"),
+        parse_mode="HTML"
+    )
+    await callback.answer(pick_lang(lang, "Куплено!", "Purchased!"))
+
+
 @dp.message(Command("reminders"))
 async def reminders(message: Message):
     uid = message.from_user.id
@@ -1074,7 +1618,6 @@ async def suggest_retry(callback: CallbackQuery):
 @dp.callback_query(F.data == "suggest_done")
 async def suggest_done(callback: CallbackQuery):
     lang = get_user_language(callback.from_user.id)
-    await callback.answer(pick_lang(lang, "ОК", "OK"))
     uid = callback.from_user.id
     today = datetime.now().strftime("%Y-%m-%d")
 
@@ -1092,19 +1635,27 @@ async def suggest_done(callback: CallbackQuery):
         await callback.answer(pick_lang(lang, "Сьогодні вже зараховано", "Already counted today"))
         return
 
+    saved_count = 0
     for line in workout_text.split("\n"):
         if line.startswith("•"):
             cur.execute(
                 "INSERT INTO workouts (user_id, text, date) VALUES (?, ?, ?)",
                 (uid, line[2:], today)
             )
+            saved_count += 1
 
     db.commit()
     db.close()
 
+    reward = SUGGESTED_WORKOUT_REWARD if saved_count else 0
+    balance = add_coins(uid, reward) if reward else get_coin_balance(uid)
+
     await callback.message.edit_text(
-        callback.message.text + pick_lang(lang, "\n\n✅ Тренування збережено", "\n\n✅ Workout saved")
+        callback.message.text
+        + pick_lang(lang, "\n\n✅ Тренування збережено", "\n\n✅ Workout saved")
+        + (format_coin_reward(lang, reward, balance) if reward else "")
     )
+    await callback.answer(pick_lang(lang, f"+{reward} монет", f"+{reward} coins") if reward else pick_lang(lang, "ОК", "OK"))
 
 
 @dp.callback_query(F.data == "challenge_next")
@@ -1144,19 +1695,27 @@ async def challenge_done(callback: CallbackQuery):
         "SELECT 1 FROM workouts WHERE user_id=? AND date=? AND is_challenge=1",
         (uid, today)
     )
-    if not cur.fetchone():
-        cur.execute(
-            "INSERT INTO workouts (user_id, text, date, is_challenge) VALUES (?, ?, ?, 1)",
-            (uid, challenge_text, today)
-        )
-        db.commit()
+    if cur.fetchone():
+        db.close()
+        await callback.answer(pick_lang(lang, "Сьогодні вже зараховано", "Already counted today"))
+        return
+
+    cur.execute(
+        "INSERT INTO workouts (user_id, text, date, is_challenge) VALUES (?, ?, ?, 1)",
+        (uid, challenge_text, today)
+    )
+    db.commit()
     db.close()
 
+    balance = add_coins(uid, CHALLENGE_COIN_REWARD)
+
     await callback.message.edit_text(
-        callback.message.text + pick_lang(lang, "\n\n✅ Челендж зараховано!", "\n\n✅ Challenge counted!"),
+        callback.message.text
+        + pick_lang(lang, "\n\n✅ Челендж зараховано!", "\n\n✅ Challenge counted!")
+        + format_coin_reward(lang, CHALLENGE_COIN_REWARD, balance),
         parse_mode="HTML"
     )
-    await callback.answer(pick_lang(lang, "Круто! Так тримати 🔥", "Great! Keep it up 🔥"))
+    await callback.answer(pick_lang(lang, f"+{CHALLENGE_COIN_REWARD} монет", f"+{CHALLENGE_COIN_REWARD} coins"))
 
 
 @dp.message(Command("workout"))
@@ -1434,7 +1993,16 @@ async def handle_input(message: Message):
         db.commit()
         db.close()
 
-        await message.answer(pick_lang(lang, f"Збережено: {len(exercises)}", f"Saved: {len(exercises)}"))
+        reward = min(len(exercises) * WORKOUT_COIN_REWARD, 50)
+        balance = add_coins(uid, reward) if reward else get_coin_balance(uid)
+
+        await message.answer(
+            pick_lang(
+                lang,
+                f"Збережено: {len(exercises)}\n🪙 +{reward} монет\nБаланс: {balance}",
+                f"Saved: {len(exercises)}\n🪙 +{reward} coins\nBalance: {balance}"
+            )
+        )
         clear_user_state(uid)
 
 
@@ -1459,6 +2027,9 @@ async def main():
         BotCommand(command="suggest", description="Запропонувати тренування"),
         BotCommand(command="set_goal", description="Встановити мету на тиждень"),
         BotCommand(command="goal", description="Показати мету на тиждень"),
+        BotCommand(command="daily", description="Щоденне завдання"),
+        BotCommand(command="wallet", description="Баланс монет"),
+        BotCommand(command="shop", description="Магазин"),
         BotCommand(command="reminders", description="Нагадування"),
         BotCommand(command="motivate", description="Мотивація"),
         BotCommand(command="tip", description="Корисна порада"),
