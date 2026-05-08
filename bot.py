@@ -91,38 +91,52 @@ def daily_task_keyboard(lang: str, task: dict, completed: bool, date_text: str =
 
 
 def shop_keyboard(lang: str) -> InlineKeyboardMarkup:
-    """Клавіатура з товарами, організованими за категоріями"""
-    rows = []
-    categories_shown = set()
-    
-    # Сортуємо по категоріям і вартості
-    sorted_items = sorted(
-        SHOP_ITEMS.items(),
-        key=lambda x: (x[1].get('category', 'Інше'), x[1]['cost'])
+    """Показує тільки категорії (шаг 1 після /shop)."""
+    categories = sorted(
+        {item.get("category", "Інше") for item in SHOP_ITEMS.values()}
     )
-    
-    for item_id, item in sorted_items:
-        category = item.get('category', 'Інше')
-        
-        # Додаємо заголовок категорії (один раз на категорію)
-        if category not in categories_shown:
-            rows.append([
-                InlineKeyboardButton(
-                    text=f"\n━━ {category} ━━",
-                    callback_data="shop_noop"
-                )
-            ])
-            categories_shown.add(category)
-        
-        icon = item.get('icon', '🛍️')
-        item_name = pick_lang(lang, item['uk_name'], item['en_name'])
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for category in categories:
+        rows.append([
+            InlineKeyboardButton(
+                text=f"━━ {category} ━━",
+                callback_data=f"shop_cat_{category}"
+            )
+        ])
+
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def shop_category_keyboard(lang: str, category: str) -> InlineKeyboardMarkup:
+    """Показує товари в конкретній категорії (шаг 2)."""
+    rows: list[list[InlineKeyboardButton]] = []
+
+    category_items = [
+        (item_id, item)
+        for item_id, item in SHOP_ITEMS.items()
+        if item.get("category", "Інше") == category
+    ]
+    category_items.sort(key=lambda x: x[1].get("cost", 0))
+
+    for item_id, item in category_items:
+        icon = item.get("icon", "🛍️")
+        item_name = pick_lang(lang, item["uk_name"], item["en_name"])
         rows.append([
             InlineKeyboardButton(
                 text=f"{icon} {item['cost']}🪙 · {item_name}",
                 callback_data=f"shop_buy_{item_id}"
             )
         ])
-    
+
+    # Кнопка назад в список категорий
+    rows.append([
+        InlineKeyboardButton(
+            text=pick_lang(lang, "⬅️ Назад", "⬅️ Back"),
+            callback_data="shop_back_to_categories"
+        )
+    ])
+
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -1921,6 +1935,34 @@ async def shop(message: Message):
 @dp.callback_query(lambda c: c.data == "shop_noop")
 async def shop_noop(callback: CallbackQuery):
     """Обработчик для кликов на заголовки категорий - ничего не делает"""
+    await callback.answer()
+
+
+
+@dp.callback_query(F.data.startswith("shop_cat_"))
+async def shop_cat(callback: CallbackQuery):
+    uid = callback.from_user.id
+    lang = get_user_language(uid)
+    category = callback.data.replace("shop_cat_", "", 1)
+
+    await callback.message.edit_text(
+        pick_lang(lang, "📦 Магазин: оберіть товар", "📦 Shop: pick an item"),
+        reply_markup=shop_category_keyboard(lang, category),
+        parse_mode=None
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "shop_back_to_categories")
+async def shop_back_to_categories(callback: CallbackQuery):
+    uid = callback.from_user.id
+    lang = get_user_language(uid)
+
+    await callback.message.edit_text(
+        pick_lang(lang, "📦 Магазин: категорії", "📦 Shop: categories"),
+        reply_markup=shop_keyboard(lang),
+        parse_mode=None
+    )
     await callback.answer()
 
 
