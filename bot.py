@@ -1153,17 +1153,20 @@ def claim_daily_coin_reward(user_id: int, source: str, amount: int):
         cur.execute("BEGIN IMMEDIATE")
         cur.execute(
             """
-            INSERT OR IGNORE INTO coin_rewards (user_id, date, source, amount, created_at)
+            INSERT INTO coin_rewards (user_id, date, source, amount, created_at)
             VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, date, source) DO UPDATE SET
+                amount = coin_rewards.amount + excluded.amount,
+                created_at = excluded.created_at
             """,
             (user_id, today, source, amount, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         )
-        awarded = cur.rowcount == 1
-        if awarded:
-            cur.execute(
-                "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
-                (amount, user_id)
-            )
+        # coin_balance нужно увеличить всегда, когда мы добавляем amount (в т.ч. в конфликт)
+        cur.execute(
+            "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
+            (amount, user_id)
+        )
+        awarded = True
         cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
         balance = int((cur.fetchone() or [0])[0] or 0)
         db.commit()
