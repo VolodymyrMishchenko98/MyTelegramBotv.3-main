@@ -1943,27 +1943,44 @@ async def shop_noop(callback: CallbackQuery):
 async def shop_cat(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = get_user_language(uid)
-    category = callback.data.replace("shop_cat_", "", 1)
-
-    await callback.message.edit_text(
-        pick_lang(lang, "📦 Магазин: оберіть товар", "📦 Shop: pick an item"),
-        reply_markup=shop_category_keyboard(lang, category),
-        parse_mode=None
-    )
     await callback.answer()
+
+    category = callback.data.replace("shop_cat_", "", 1)
+    text = pick_lang(lang, "📦 Магазин: оберіть товар", "📦 Shop: pick an item")
+
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=shop_category_keyboard(lang, category),
+            parse_mode=None,
+        )
+    except Exception:
+        # fallback если edit_text не удалось (не модифицировано / нельзя редактировать / т.п.)
+        await callback.message.answer(
+            text,
+            reply_markup=shop_category_keyboard(lang, category),
+        )
 
 
 @dp.callback_query(F.data == "shop_back_to_categories")
 async def shop_back_to_categories(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = get_user_language(uid)
-
-    await callback.message.edit_text(
-        pick_lang(lang, "📦 Магазин: категорії", "📦 Shop: categories"),
-        reply_markup=shop_keyboard(lang),
-        parse_mode=None
-    )
     await callback.answer()
+
+    text = pick_lang(lang, "📦 Магазин: категорії", "📦 Shop: categories")
+
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=shop_keyboard(lang),
+            parse_mode=None,
+        )
+    except Exception:
+        await callback.message.answer(
+            text,
+            reply_markup=shop_keyboard(lang),
+        )
 
 
 @dp.callback_query(F.data.startswith("shop_buy_"))
