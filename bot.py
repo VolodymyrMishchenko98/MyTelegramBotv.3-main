@@ -91,14 +91,38 @@ def daily_task_keyboard(lang: str, task: dict, completed: bool, date_text: str =
 
 
 def shop_keyboard(lang: str) -> InlineKeyboardMarkup:
+    """Клавіатура з товарами, організованими за категоріями"""
     rows = []
-    for item_id, item in SHOP_ITEMS.items():
+    categories_shown = set()
+    
+    # Сортуємо по категоріям і вартості
+    sorted_items = sorted(
+        SHOP_ITEMS.items(),
+        key=lambda x: (x[1].get('category', 'Інше'), x[1]['cost'])
+    )
+    
+    for item_id, item in sorted_items:
+        category = item.get('category', 'Інше')
+        
+        # Додаємо заголовок категорії (один раз на категорію)
+        if category not in categories_shown:
+            rows.append([
+                InlineKeyboardButton(
+                    text=f"\n━━ {category} ━━",
+                    callback_data="shop_noop"
+                )
+            ])
+            categories_shown.add(category)
+        
+        icon = item.get('icon', '🛍️')
+        item_name = pick_lang(lang, item['uk_name'], item['en_name'])
         rows.append([
             InlineKeyboardButton(
-                text=f"🪙 {item['cost']} · {pick_lang(lang, item['uk_name'], item['en_name'])}",
+                text=f"{icon} {item['cost']}🪙 · {item_name}",
                 callback_data=f"shop_buy_{item_id}"
             )
         ])
+    
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -110,27 +134,297 @@ PROFILE_FIELDS = (
     ("goal", "Мета", "Goal"),
 )
 
+# Константи для обмежень
+MAX_POWER_PLANS = 3  # Макс преміум тренувань
+MAX_MOTIVATION_PACKS = 2
+MAX_COIN_BOOSTERS = 1
+MAX_RESTORE_TOKENS = 2
+
 SHOP_ITEMS = {
+    # === ТРЕНУВАЛЬНІ ПРОГРАМИ ===
     "power_plan": {
         "cost": 60,
+        "category": "Тренування",
+        "type": "functional",
         "uk_name": "Преміум тренування",
         "en_name": "Premium workout",
-        "uk_desc": "Отримай випадкове посилене тренування.",
+        "uk_desc": "Посилене тренування з вулу.",
         "en_desc": "Get a random stronger workout.",
+        "icon": "⚡",
     },
+    "monthly_program": {
+        "cost": 150,
+        "category": "Тренування",
+        "type": "functional",
+        "uk_name": "Програма на місяць",
+        "en_name": "Monthly program",
+        "uk_desc": "30 днів прогресивного навчання. Доступний навіки.",
+        "en_desc": "30 days of progressive training. Lifetime access.",
+        "icon": "📅",
+    },
+    "home_gym": {
+        "cost": 120,
+        "category": "Тренування",
+        "type": "functional",
+        "uk_name": "Домашний спортзал",
+        "en_name": "Home gym guide",
+        "uk_desc": "Тренування без обладнання. 40+ вправ.",
+        "en_desc": "Bodyweight exercises guide. 40+ exercises.",
+        "icon": "🏠",
+    },
+    "hiit_protocol": {
+        "cost": 100,
+        "category": "Тренування",
+        "type": "functional",
+        "uk_name": "HIIT протокол",
+        "en_name": "HIIT protocol",
+        "uk_desc": "Інтенсивні інтервальні тренування для жиросплавки.",
+        "en_desc": "High-intensity interval training for fat loss.",
+        "icon": "🔥",
+    },
+    
+    # === ПІДДЕРЖКА І ЕНЕРГІЯ ===
     "motivation_pack": {
         "cost": 35,
+        "category": "Піддержка",
+        "type": "functional",
         "uk_name": "Пак мотивації",
         "en_name": "Motivation pack",
-        "uk_desc": "Три мотиваційні фрази одним повідомленням.",
-        "en_desc": "Three motivational quotes in one message.",
+        "uk_desc": "3 мотиваційні цитати.",
+        "en_desc": "3 motivational quotes.",
+        "icon": "💪",
     },
+    "energy_drink": {
+        "cost": 45,
+        "category": "Піддержка",
+        "type": "consumable",
+        "uk_name": "Енергетичний напиток",
+        "en_name": "Energy drink",
+        "uk_desc": "Дай собі бодрості перед тренуванням.",
+        "en_desc": "Boost before workout.",
+        "icon": "🥤",
+    },
+    "sleep_guide": {
+        "cost": 50,
+        "category": "Піддержка",
+        "type": "functional",
+        "uk_name": "Гід здорового сну",
+        "en_name": "Sleep guide",
+        "uk_desc": "Оптимізуй відновлення: 8 годин якісного сну.",
+        "en_desc": "Optimize recovery with quality sleep tips.",
+        "icon": "😴",
+    },
+    
+    # === АКСЕССУАРИ ===
+    "gym_towel": {
+        "cost": 25,
+        "category": "Аксесуари",
+        "type": "collectible",
+        "uk_name": "Рушник для спортзалу",
+        "en_name": "Gym towel",
+        "uk_desc": "Якісний мікрофібровий рушник.",
+        "en_desc": "Premium microfiber gym towel.",
+        "icon": "🧣",
+    },
+    "water_bottle": {
+        "cost": 40,
+        "category": "Аксесуари",
+        "type": "collectible",
+        "uk_name": "Спортивна пляшка",
+        "en_name": "Sports bottle",
+        "uk_desc": "Залишайся гідратованим. 1.5 л.",
+        "en_desc": "Stay hydrated. 1.5L capacity.",
+        "icon": "🍾",
+    },
+    "training_gloves": {
+        "cost": 55,
+        "category": "Аксесуари",
+        "type": "collectible",
+        "uk_name": "Тренувальні рукавиці",
+        "en_name": "Training gloves",
+        "uk_desc": "Захист при силових вправах.",
+        "en_desc": "Protection for heavy lifts.",
+        "icon": "🧤",
+    },
+    "yoga_mat": {
+        "cost": 60,
+        "category": "Аксесуари",
+        "type": "collectible",
+        "uk_name": "Килимок для йоги",
+        "en_name": "Yoga mat",
+        "uk_desc": "Комфортна поверхня для вправ.",
+        "en_desc": "Comfort mat for exercises.",
+        "icon": "🧘",
+    },
+    "headphones": {
+        "cost": 70,
+        "category": "Аксесуари",
+        "type": "collectible",
+        "uk_name": "Спортивні навушники",
+        "en_name": "Sports headphones",
+        "uk_desc": "Водостійкі, з гарною музикою.",
+        "en_desc": "Waterproof with great sound.",
+        "icon": "🎧",
+    },
+    
+    # === ХАРЧУВАННЯ ===
+    "protein_powder": {
+        "cost": 80,
+        "category": "Харчування",
+        "type": "consumable",
+        "uk_name": "Протеїновий порошок",
+        "en_name": "Protein powder",
+        "uk_desc": "Якісний сироватковий білок. 500г.",
+        "en_desc": "Quality whey protein. 500g.",
+        "icon": "🥛",
+    },
+    "creatine": {
+        "cost": 65,
+        "category": "Харчування",
+        "type": "consumable",
+        "uk_name": "Креатин моногідрат",
+        "en_name": "Creatine monohydrate",
+        "uk_desc": "Для більшої сили і мышечної маси.",
+        "en_desc": "Boost strength and muscle growth.",
+        "icon": "💊",
+    },
+    "bcaa": {
+        "cost": 75,
+        "category": "Харчування",
+        "type": "consumable",
+        "uk_name": "BCAA амінокислоти",
+        "en_name": "BCAA amino acids",
+        "uk_desc": "Для відновлення м'язів. 200 порцій.",
+        "en_desc": "Muscle recovery. 200 servings.",
+        "icon": "⚗️",
+    },
+    "multivitamin": {
+        "cost": 70,
+        "category": "Харчування",
+        "type": "consumable",
+        "uk_name": "Мультивітамін",
+        "en_name": "Multivitamin",
+        "uk_desc": "Повні вітаміни і мінерали. Не хворій!",
+        "en_desc": "Full spectrum vitamins & minerals.",
+        "icon": "🔬",
+    },
+    "weight_gainer": {
+        "cost": 90,
+        "category": "Харчування",
+        "type": "consumable",
+        "uk_name": "Вейт-гейнер",
+        "en_name": "Weight gainer",
+        "uk_desc": "Для набору маси. 1 кг, 10 порцій.",
+        "en_desc": "Mass gainer. 1kg, 10 servings.",
+        "icon": "🍫",
+    },
+    
+    # === БЕЙДЖИ (КОЛЕКЦІЙНІ) ===
     "rest_badge": {
         "cost": 80,
-        "uk_name": "Бейдж відновлення",
-        "en_name": "Recovery badge",
-        "uk_desc": "Колекційний бейдж для балансу.",
-        "en_desc": "A collectible badge for your wallet.",
+        "category": "Бейджи",
+        "type": "collectible",
+        "uk_name": "Бейдж Відновлення 🏆",
+        "en_name": "Recovery badge 🏆",
+        "uk_desc": "Рідкісний бейдж за баланс у тренуванні.",
+        "en_desc": "Rare badge for training balance.",
+        "icon": "🎖️",
+    },
+    "champion_badge": {
+        "cost": 100,
+        "category": "Бейджи",
+        "type": "collectible",
+        "uk_name": "Чемпіон 👑",
+        "en_name": "Champion 👑",
+        "uk_desc": "Престижний бейдж для переможців.",
+        "en_desc": "Prestige badge for champions.",
+        "icon": "👑",
+    },
+    "endurance_badge": {
+        "cost": 85,
+        "category": "Бейджи",
+        "type": "collectible",
+        "uk_name": "Витривалість 💯",
+        "en_name": "Endurance 💯",
+        "uk_desc": "За 100 днів безперервних тренувань.",
+        "en_desc": "For 100 consecutive training days.",
+        "icon": "💯",
+    },
+    "strength_badge": {
+        "cost": 90,
+        "category": "Бейджи",
+        "type": "collectible",
+        "uk_name": "Сила 💪",
+        "en_name": "Strength 💪",
+        "uk_desc": "За подолання власних меж.",
+        "en_desc": "For pushing your limits.",
+        "icon": "💪",
+    },
+    "speed_badge": {
+        "cost": 85,
+        "category": "Бейджи",
+        "type": "collectible",
+        "uk_name": "Швидкість ⚡",
+        "en_name": "Speed ⚡",
+        "uk_desc": "За швидкі інтенсивні тренування.",
+        "en_desc": "For high-intensity cardio.",
+        "icon": "⚡",
+    },
+    
+    # === БУСТИ (ОБМЕЖЕНО) ===
+    "coin_booster_x2": {
+        "cost": 150,
+        "category": "Бусти",
+        "type": "booster",
+        "uk_name": "Бустер монет ×2 (1 неділя)",
+        "en_name": "Coin booster ×2 (1 week)",
+        "uk_desc": "Отримуй в 2 рази більше монет за тренування.",
+        "en_desc": "Earn 2x coins for 7 days.",
+        "icon": "🪙",
+        "max_count": MAX_COIN_BOOSTERS,
+    },
+    "restore_stamina": {
+        "cost": 120,
+        "category": "Бусти",
+        "type": "booster",
+        "uk_name": "Відновити енергію",
+        "en_name": "Restore stamina",
+        "uk_desc": "Перезагрузи свою енергію для нового челенджу.",
+        "en_desc": "Reset your energy for new challenges.",
+        "icon": "⚡",
+        "max_count": MAX_RESTORE_TOKENS,
+    },
+    "skip_daily_task": {
+        "cost": 90,
+        "category": "Бусти",
+        "type": "booster",
+        "uk_name": "Пропустити завдання",
+        "en_name": "Skip daily task",
+        "uk_desc": "Пропусти щоденне завдання без штрафу.",
+        "en_desc": "Skip daily task without penalty.",
+        "icon": "⏭️",
+    },
+    
+    # === ЕКСКЛЮЗИВНІ/ОБМЕЖЕНІ ===
+    "legendary_pack": {
+        "cost": 200,
+        "category": "Ексклюзив",
+        "type": "collectible",
+        "uk_name": "Легендарний набір 🌟",
+        "en_name": "Legendary pack 🌟",
+        "uk_desc": "Всі програми + бейджи + бусти. Обмежено!",
+        "en_desc": "All programs + badges + boosters. Limited!",
+        "icon": "🌟",
+    },
+    "vip_membership": {
+        "cost": 250,
+        "category": "Ексклюзив",
+        "type": "collectible",
+        "uk_name": "VIP членство (1 місяць)",
+        "en_name": "VIP membership (1 month)",
+        "uk_desc": "Ексклюзивні тренування + 50% знижка на всіх товарах.",
+        "en_desc": "Exclusive workouts + 50% discount on all items.",
+        "icon": "👑",
     },
 }
 
@@ -899,6 +1193,24 @@ def buy_shop_item(user_id: int, item_id: str, cost: int):
     cur = db.cursor()
     try:
         cur.execute("BEGIN IMMEDIATE")
+        
+        # Проверяем максимальное количество
+        item = SHOP_ITEMS.get(item_id, {})
+        max_count = item.get('max_count')
+        
+        if max_count:
+            cur.execute(
+                "SELECT COUNT(*) FROM user_items WHERE user_id=? AND item_id=?",
+                (user_id, item_id)
+            )
+            current_count = cur.fetchone()[0]
+            if current_count >= max_count:
+                cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+                balance = int((cur.fetchone() or [0])[0] or 0)
+                db.commit()
+                return False, balance, "limit_exceeded"
+        
+        # Проверяем баланс
         cur.execute(
             """
             UPDATE users
@@ -911,8 +1223,9 @@ def buy_shop_item(user_id: int, item_id: str, cost: int):
             cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
             balance = int((cur.fetchone() or [0])[0] or 0)
             db.commit()
-            return False, balance
+            return False, balance, "insufficient_coins"
 
+        # Добавляем товар в инвентарь
         cur.execute(
             "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
             (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
@@ -920,7 +1233,7 @@ def buy_shop_item(user_id: int, item_id: str, cost: int):
         cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
         balance = int((cur.fetchone() or [0])[0] or 0)
         db.commit()
-        return True, balance
+        return True, balance, "success"
     except Exception:
         db.rollback()
         raise
@@ -1564,26 +1877,51 @@ async def wallet(message: Message):
 async def shop(message: Message):
     lang = get_user_language(message.from_user.id)
     balance = get_coin_balance(message.from_user.id)
-    lines = [pick_lang(lang, f"Баланс: {balance} монет", f"Balance: {balance} coins")]
-
-    for item in SHOP_ITEMS.values():
-        lines.append(
-            pick_lang(
-                lang,
-                f"🪙 {item['cost']} — {item['uk_name']}\n{item['uk_desc']}",
-                f"🪙 {item['cost']} — {item['en_name']}\n{item['en_desc']}"
-            )
-        )
+    
+    # Оновлена структурована інформація про магазин
+    header = pick_lang(
+        lang,
+        f"🪙 Баланс: {balance} монет\n\nОберіть товар нижче:",
+        f"🪙 Balance: {balance} coins\n\nChoose an item below:"
+    )
+    
+    # Генерируем информацию по категориям
+    categories = {}
+    for item_id, item in SHOP_ITEMS.items():
+        cat = item.get('category', 'Інше')
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(item_id)
+    
+    lines = [header]
+    for cat in sorted(categories.keys()):
+        lines.append(f"\n{'='*40}")
+        lines.append(f"{cat}")
+        lines.append('='*40)
+        
+        for item_id in categories[cat]:
+            item = SHOP_ITEMS[item_id]
+            icon = item.get('icon', '🛍️')
+            name = pick_lang(lang, item['uk_name'], item['en_name'])
+            desc = pick_lang(lang, item['uk_desc'], item['en_desc'])
+            lines.append(f"{icon} {item['cost']}🪙 | {name}")
+            lines.append(f"  └─ {desc}")
 
     await message.answer(
         style_block(
-            pick_lang(lang, "Магазин", "Shop"),
-            "\n\n".join(lines),
+            pick_lang(lang, "🛒 Магазин Спортсмена", "🛒 Sports Shop"),
+            "\n".join(lines),
             icon="🛒"
         ),
         parse_mode="HTML",
         reply_markup=shop_keyboard(lang)
     )
+
+
+@dp.callback_query(lambda c: c.data == "shop_noop")
+async def shop_noop(callback: CallbackQuery):
+    """Обработчик для кликов на заголовки категорий - ничего не делает"""
+    await callback.answer()
 
 
 @dp.callback_query(F.data.startswith("shop_buy_"))
@@ -1597,8 +1935,21 @@ async def shop_buy(callback: CallbackQuery):
         await callback.answer(pick_lang(lang, "Товар не знайдено", "Item not found"), show_alert=True)
         return
 
-    paid, balance = buy_shop_item(uid, item_id, item["cost"])
-    if not paid:
+    paid, balance, status = buy_shop_item(uid, item_id, item["cost"])
+    
+    if status == "limit_exceeded":
+        max_count = item.get('max_count', 1)
+        await callback.answer(
+            pick_lang(
+                lang,
+                f"Макс куплено: {max_count} шт. Вижраних: /wallet",
+                f"Maximum purchased: {max_count}. View: /wallet"
+            ),
+            show_alert=True
+        )
+        return
+    
+    if status == "insufficient_coins":
         await callback.answer(
             pick_lang(
                 lang,
@@ -1609,33 +1960,105 @@ async def shop_buy(callback: CallbackQuery):
         )
         return
 
-    item_name = pick_lang(lang, item["uk_name"], item["en_name"])
+    # При успешной покупке генерируем разные отговеты в зависимости от типа
+    item_name = pick_lang(lang, item['uk_name'], item['en_name'])
+    item_desc = pick_lang(lang, item['uk_desc'], item['en_desc'])
+    item_type = item.get('type', 'unknown')
 
-    if item_id == "power_plan":
-        body = pick_lang(
-            lang,
-            f"Куплено: {item_name}\nБаланс: {balance}\n\n{get_premium_workout(lang)}",
-            f"Purchased: {item_name}\nBalance: {balance}\n\n{get_premium_workout(lang)}"
-        )
-    elif item_id == "motivation_pack":
-        quotes = "\n".join(f"• {get_motivation_quote(lang)}" for _ in range(3))
-        body = pick_lang(
-            lang,
-            f"Куплено: {item_name}\nБаланс: {balance}\n\n{quotes}",
-            f"Purchased: {item_name}\nBalance: {balance}\n\n{quotes}"
-        )
-    else:
-        body = pick_lang(
-            lang,
-            f"Куплено: {item_name}\nБаланс: {balance}\nБейдж додано в /wallet.",
-            f"Purchased: {item_name}\nBalance: {balance}\nBadge added to /wallet."
-        )
+    # Основное сообщение
+    base_msg = pick_lang(
+        lang,
+        f"✅ {item_name}\n🪙 Баланс: {balance}",
+        f"✅ {item_name}\n🪙 Balance: {balance}"
+    )
+
+    # Генерируем содержимое в зависимости от типа
+    if item_type == "functional":
+        if item_id == "power_plan":
+            body = f"{base_msg}\n\n{get_premium_workout(lang)}"
+        elif item_id == "monthly_program":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n📅 30 днів модуля:\n• Тиждень 1: Основа\n• Тиждень 2-3: Настроювання\n• Тиждень 4: Пік\n\nВицавлено наовна в /магазині",
+                f"{base_msg}\n\n📅 30-day progression:\n• Week 1: Foundation\n• Week 2-3: Building\n• Week 4: Peak\n\nStart now: /profile"
+            )
+        elif item_id == "home_gym":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n🏠 40+ вправ без обладнання!\nУсо в /wallet",
+                f"{base_msg}\n\n🏠 40+ bodyweight exercises!\nOpen: /wallet"
+            )
+        elif item_id == "hiit_protocol":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n🔥 HIIT - 20 мін для максимального ефекту калорій",
+                f"{base_msg}\n\n🔥 20-min intervals for max calorie burn"
+            )
+        elif item_id == "sleep_guide":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n😴 Таємниці сну атлета: Оптимальна температура, час сну",
+                f"{base_msg}\n\n😴 Athlete's sleep formula: temp, timing, duration"
+            )
+        else:
+            body = f"{base_msg}\n\n{item_desc}"
+
+    elif item_type == "consumable":
+        if item_id == "motivation_pack":
+            quotes = "\n".join(f"• {get_motivation_quote(lang)}" for _ in range(3))
+            body = f"{base_msg}\n\n{quotes}"
+        elif item_id == "energy_drink":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n🥤 Зарядився! 🤸\nТепер рязва пітти води і тренуватися!",
+                f"{base_msg}\n\n🥤 Powered up! 🤸\nTime to crush it!"
+            )
+        else:
+            body = f"{base_msg}\n\n✨ {item_desc}"
+
+    elif item_type == "booster":
+        if item_id == "coin_booster_x2":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n🪙 × 2 МОНЕТ на 7 днів!\nВсі тренування = 2x рівардс",
+                f"{base_msg}\n\n🪙 × 2 COINS for 7 days!\nAll workouts = 2x rewards"
+            )
+        elif item_id == "restore_stamina":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n⚡ Відновлено!\nКільканка чотири години активності.",
+                f"{base_msg}\n\n⚡ Restored!\n4 hours of active energy."
+            )
+        elif item_id == "skip_daily_task":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n⏭️ Топ (день) випало!",
+                f"{base_msg}\n\n⏭️ Daily task skipped penalty-free!"
+            )
+        else:
+            body = f"{base_msg}\n\n⚡ {item_desc}"
+
+    else:  # collectible + exclusive
+        if item_id == "legendary_pack":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n🌟 ЛЕГЕНДА! 🌟\nОвдточено всі доступні бонуси!\nОбмежено кілька годин.",
+                f"{base_msg}\n\n🌟 LEGENDARY! 🌟\nUnlocked all available bonuses!\nHurry - limited time offer."
+            )
+        elif item_id == "vip_membership":
+            body = pick_lang(
+                lang,
+                f"{base_msg}\n\n👑 VIP доступ 👑\nНа місяць: +50% знижка, екскльузив\nОтримати графік 1 ра неділя.",
+                f"{base_msg}\n\n👑 VIP ACCESS 👑\n1 Month: 50% discount + exclusive\ntraining schedule unlock."
+            )
+        else:
+            body = f"{base_msg}\n\n🌟 {item_desc}"
 
     await callback.message.answer(
-        style_block(pick_lang(lang, "Покупка", "Purchase"), body, icon="✅"),
+        style_block(pick_lang(lang, "📖 Умвовання в /wallet", "📖 Unlocked in /wallet"), body, icon="✅"),
         parse_mode="HTML"
     )
-    await callback.answer(pick_lang(lang, "Куплено!", "Purchased!"))
+    await callback.answer(pick_lang(lang, "🌟 Отмено!", "🌟 Awesome!"))
 
 
 @dp.message(Command("reminders"))
