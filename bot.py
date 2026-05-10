@@ -35,6 +35,27 @@ dp = Dispatcher()
 
 calories_cache = {}
 
+# Дедупликация команд: некоторые клиенты могут отправлять апдейт повторно.
+# Чтобы не выполнять обработчик дважды, кэшируем message_id на короткое время.
+_duplicate_cmd_cache: dict[int, tuple[int, float]] = {}
+_DUPLICATE_TTL_SEC = 10
+
+
+def is_duplicate_command(user_id: int, message_id: int) -> bool:
+    """
+    Возвращает True, если это сообщение уже обрабатывали недавно для этого user_id.
+    """
+    now_ts = datetime.now().timestamp()
+    cached = _duplicate_cmd_cache.get(user_id)
+
+    if cached:
+        cached_message_id, cached_ts = cached
+        if cached_message_id == message_id and (now_ts - cached_ts) <= _DUPLICATE_TTL_SEC:
+            return True
+
+    _duplicate_cmd_cache[user_id] = (message_id, now_ts)
+    return False
+
 # ---------- UI ----------
 def reminders_on_keyboard(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
