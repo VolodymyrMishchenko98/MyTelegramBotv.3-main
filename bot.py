@@ -1531,6 +1531,11 @@ def calc_calories(text: str) -> int:
     return 0
 
 
+async def calc_calories_async(text: str) -> int:
+    # requests.get блокирует event loop, поэтому выполняем в отдельном потоке
+    return await asyncio.to_thread(calc_calories, text)
+
+
 def calculate_streak(dates):
     used = set(dates)
     streak = 0
@@ -2486,21 +2491,18 @@ async def today(message: Message):
         await message.answer(pick_lang(lang, "Сьогодні тренувань немає.", "No workouts today."))
         return
 
-    # Separate challenges and regular workouts
-    workouts_text_list = []
+    workouts_text_list: list[str] = []
+    # Считаем калории параллельно, чтобы не блокировать event loop
+    calories = await asyncio.gather(*(calc_calories_async(text) for text, _ in rows))
+
     total_cal = 0
-    
-    for text, is_challenge in rows:
-        cal = calc_calories(text)
+    for (text, is_challenge), cal in zip(rows, calories):
         total_cal += cal
-        
         if is_challenge:
-            # Display challenge with trophy icon
             workouts_text_list.append(f"🏆 {text}")
         else:
-            # Display regular workout
             workouts_text_list.append(f"• {text}")
-    
+
     text = "\n".join(workouts_text_list)
 
     await message.answer(
@@ -2537,8 +2539,12 @@ async def stats(message: Message):
 
     week_ago = (datetime.now() - timedelta(days=6)).strftime("%Y-%m-%d")
 
-    total_cal = sum(calc_calories(t) for _, t in rows)
-    week_cal = sum(calc_calories(t) for d, t in rows if d >= week_ago)
+    # Параллельно считаем калории (избегаем блокировки event loop из-за requests)
+    all_texts = [t for _, t in rows]
+    calories = await asyncio.gather(*(calc_calories_async(t) for t in all_texts))
+
+    total_cal = sum(calories)
+    week_cal = sum(cal for (d, _), cal in zip(rows, calories) if d >= week_ago)
 
     text = (
         pick_lang(
