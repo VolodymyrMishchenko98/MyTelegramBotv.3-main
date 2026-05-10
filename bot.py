@@ -1617,13 +1617,15 @@ async def set_language_command(message: Message):
 async def set_language(callback: CallbackQuery):
     lang = "en" if callback.data == "set_lang_en" else "uk"
     set_user_language(callback.from_user.id, lang)
-    await callback.answer("Saved" if lang == "en" else "Збережено")
+    await callback.answer("Saved" if lang == "en" else "Р—Р±РµСЂРµР¶РµСЂРЅРѕ")
     await callback.message.edit_text(build_start_text(lang), parse_mode="HTML")
 
 
 @dp.message(Command("profile"))
 async def profile(message: Message):
     uid = message.from_user.id
+    if is_duplicate_command(uid, message.message_id):
+        return
     lang = get_user_language(uid)
     
     # Проверяем, существует ли пользователь
@@ -1691,8 +1693,11 @@ async def profile(message: Message):
 
 @dp.message(Command("edit_profile"))
 async def edit_profile(message: Message):
-    lang = get_user_language(message.from_user.id)
-    set_user_state(message.from_user.id, "profile")
+    uid = message.from_user.id
+    if is_duplicate_command(uid, message.message_id):
+        return
+    lang = get_user_language(uid)
+    set_user_state(uid, "profile")
     await message.answer(
         pick_lang(
             lang,
