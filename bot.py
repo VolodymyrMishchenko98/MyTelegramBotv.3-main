@@ -16,6 +16,10 @@ from aiogram.types import (
 from aiogram.filters import Command
 import os
 from dotenv import load_dotenv
+from db_improved import (
+    get_db, execute_query, fetch_one, fetch_all, execute_transaction,
+    clear_user_all_data, verify_user_exists, get_user_data_safe, init_connection, get_db_context
+)
 
 load_dotenv()
 token = os.getenv("BOT_TOKEN")
@@ -809,8 +813,8 @@ def get_missed_day_messages(lang: str):
 
 
 # ---------- DB ----------
-def get_db():
-    return sqlite3.connect("sportbot.db")
+# get_db() теперь импортируется из db_improved и использует глобальное соединение
+# Оставляем здесь для совместимости с остальным кодом
 
 
 def init_db():
@@ -1121,27 +1125,18 @@ def ensure_user(user_id: int):
 
 def get_coin_balance(user_id: int) -> int:
     ensure_user(user_id)
-    db = get_db()
-    cur = db.cursor()
-    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-    row = cur.fetchone()
-    db.close()
+    row = fetch_one("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
     return int(row[0] or 0) if row else 0
 
 
 def add_coins(user_id: int, amount: int) -> int:
     ensure_user(user_id)
-    db = get_db()
-    cur = db.cursor()
-    cur.execute(
+    execute_query(
         "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) + ? WHERE user_id=?",
         (amount, user_id)
     )
-    cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-    balance = cur.fetchone()[0] or 0
-    db.commit()
-    db.close()
-    return int(balance)
+    row = fetch_one("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
+    return int(row[0] or 0) if row else 0
 
 
 def claim_daily_coin_reward(user_id: int, source: str, amount: int):
@@ -1205,80 +1200,99 @@ def spend_coins(user_id: int, amount: int):
 
 
 def buy_shop_item(user_id: int, item_id: str, cost: int):
+    """
+    Безопасная функция покупки товара с использованием транзакции
+    Возвращает (success: bool, balance: int, status: str)
+    """
     ensure_user(user_id)
-    db = get_db()
-    cur = db.cursor()
+    
     try:
-        cur.execute("BEGIN IMMEDIATE")
-        
         # Проверяем максимальное количество
         item = SHOP_ITEMS.get(item_id, {})
         max_count = item.get('max_count')
         
         if max_count:
-            cur.execute(
+            row = fetch_one(
                 "SELECT COUNT(*) FROM user_items WHERE user_id=? AND item_id=?",
                 (user_id, item_id)
             )
-            current_count = cur.fetchone()[0]
+            current_count = row[0] if row else 0
             if current_count >= max_count:
-                cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-                balance = int((cur.fetchone() or [0])[0] or 0)
-                db.commit()
+                balance_row = fetch_one(
+                    "SELECT COALESCE(coin_balance, 0) FROM users WHERE user_id=?", 
+                    (user_id,)
+                )
+                balance = int(balance_row[0] or 0) if balance_row else 0
                 return False, balance, "limit_exceeded"
         
-        # Проверяем баланс
-        cur.execute(
-            """
-            UPDATE users
-            SET coin_balance = COALESCE(coin_balance, 0) - ?
-            WHERE user_id=? AND COALESCE(coin_balance, 0) >= ?
-            """,
-            (cost, user_id, cost)
+        # Используем транзакцию для атомарности операции
+        operations = [
+            # Сначала проверяем текущий баланс
+            "SELECT COALESCE(coin_balance, 0) FROM users WHERE user_id=?",
+        ]
+        
+        # Получаем текущий баланс
+        balance_row = fetch_one(
+            "SELECT COALESCE(coin_balance, 0) FROM users WHERE user_id=?",
+            (user_id,)
         )
-        if cur.rowcount != 1:
-            cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-            balance = int((cur.fetchone() or [0])[0] or 0)
-            db.commit()
-            return False, balance, "insufficient_coins"
-
-        # Добавляем товар в инвентарь
-        cur.execute(
-            "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
-            (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        current_balance = int(balance_row[0]) if balance_row else 0
+        
+        # Проверяем достаточность средств
+        if current_balance < cost:
+            return False, current_balance, "insufficient_coins"
+        
+        # Выполняем транзакцию
+        try:
+            ops = [
+                (
+                    "UPDATE users SET coin_balance = COALESCE(coin_balance, 0) - ? WHERE user_id=?",
+                    (cost, user_id)
+                ),
+                (
+                    "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
+                    (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                ),
+            ]
+            execute_transaction(ops)
+            
+            # Получаем новый баланс
+            balance_row = fetch_one(
+                "SELECT COALESCE(coin_balance, 0) FROM users WHERE user_id=?",
+                (user_id,)
+            )
+            new_balance = int(balance_row[0]) if balance_row else 0
+            
+            return True, new_balance, "success"
+        except Exception as e:
+            print(f"Error in transaction: {e}")
+            # Откатываем изменения (они будут откачены автоматически в execute_transaction)
+            return False, current_balance, "transaction_failed"
+            
+    except Exception as e:
+        print(f"Error in buy_shop_item: {e}")
+        # Получаем текущий баланс для возврата
+        balance_row = fetch_one(
+            "SELECT COALESCE(coin_balance, 0) FROM users WHERE user_id=?",
+            (user_id,)
         )
-        cur.execute("SELECT coin_balance FROM users WHERE user_id=?", (user_id,))
-        balance = int((cur.fetchone() or [0])[0] or 0)
-        db.commit()
-        return True, balance, "success"
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
+        balance = int(balance_row[0]) if balance_row else 0
+        return False, balance, "error"
 
 
 def add_user_item(user_id: int, item_id: str):
-    db = get_db()
-    cur = db.cursor()
-    cur.execute(
+    execute_query(
         "INSERT INTO user_items (user_id, item_id, purchased_at) VALUES (?, ?, ?)",
         (user_id, item_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     )
-    db.commit()
-    db.close()
 
 
 def get_user_items(user_id: int) -> dict:
-    db = get_db()
-    cur = db.cursor()
-    cur.execute(
+    rows = fetch_all(
         "SELECT item_id, COUNT(*) FROM user_items WHERE user_id=? GROUP BY item_id",
         (user_id,)
     )
-    rows = cur.fetchall()
-    db.close()
-    return {item_id: count for item_id, count in rows}
+    return {item_id: count for item_id, count in rows} if rows else {}
 
 
 def format_coin_reward(lang: str, amount: int, balance: int) -> str:
@@ -1545,20 +1559,20 @@ async def reset_profile(message: Message):
 async def reset_yes(callback: CallbackQuery):
     uid = callback.from_user.id
     lang = get_user_language(uid)
-    db = get_db()
-    cur = db.cursor()
-
-    cur.execute("DELETE FROM workouts WHERE user_id=?", (uid,))
-    cur.execute("DELETE FROM weights WHERE user_id=?", (uid,))
-    cur.execute("DELETE FROM user_items WHERE user_id=?", (uid,))
-    cur.execute("DELETE FROM daily_tasks WHERE user_id=?", (uid,))
-    cur.execute("DELETE FROM coin_rewards WHERE user_id=?", (uid,))
-    cur.execute("DELETE FROM users WHERE user_id=?", (uid,))
-
-    db.commit()
-    db.close()
-
-    await callback.message.edit_text(pick_lang(lang, "Профіль повністю видалено.", "Profile and all data were deleted."))
+    
+    # Используем новую безопасную функцию
+    success = clear_user_all_data(uid)
+    
+    if success:
+        await callback.message.edit_text(
+            pick_lang(lang, "✅ Профіль повністю видалено. Дані очищені.", 
+                     "✅ Profile completely deleted. All data cleared.")
+        )
+    else:
+        await callback.message.edit_text(
+            pick_lang(lang, "❌ Помилка при видаленні. Спробуйте пізніше.", 
+                     "❌ Error during deletion. Try again later.")
+        )
 
 
 @dp.callback_query(lambda c: c.data == "reset_no")
@@ -1611,9 +1625,23 @@ async def set_language(callback: CallbackQuery):
 async def profile(message: Message):
     uid = message.from_user.id
     lang = get_user_language(uid)
-    profile_data = get_user_profile(uid)
-
-    if not is_profile_complete(profile_data):
+    
+    # Проверяем, существует ли пользователь
+    if not verify_user_exists(uid):
+        set_user_state(uid, "profile")
+        await message.answer(
+            pick_lang(
+                lang,
+                "Введи профіль:\nЗріст, стать, вік, мета\nПриклад: 165, ч, 25, набрати масу",
+                "Enter your profile:\nHeight, gender, age, goal\nExample: 165, m, 25, gain muscle"
+            )
+        )
+        return
+    
+    # Получаем данные безопасно
+    profile_row = get_user_data_safe(uid)
+    
+    if not profile_row:
         set_user_state(uid, "profile")
         await message.answer(
             pick_lang(
@@ -1624,16 +1652,7 @@ async def profile(message: Message):
         )
         return
 
-    h = profile_data["height"]
-    g = profile_data["gender"]
-    age = profile_data["age"]
-    goal = profile_data["goal"]
-    current_weight = profile_data["current_weight"]
-    show_height = profile_data["show_height"]
-    show_gender = profile_data["show_gender"]
-    show_age = profile_data["show_age"]
-    show_weight = profile_data["show_weight"]
-    show_goal = profile_data["show_goal"]
+    h, g, age, goal, current_weight, show_height, show_gender, show_age, show_weight, show_goal = profile_row
 
     weight_text = f"{current_weight:.1f} кг" if current_weight and current_weight > 0 else pick_lang(lang, "не вказана", "not set")
     age_text = str(age) if age else pick_lang(lang, "не вказаний", "not set")
@@ -1892,47 +1911,39 @@ async def wallet(message: Message):
 
 @dp.message(Command("shop"))
 async def shop(message: Message):
-    lang = get_user_language(message.from_user.id)
-    balance = get_coin_balance(message.from_user.id)
+    uid = message.from_user.id
+    lang = get_user_language(uid)
     
-    # Оновлена структурована інформація про магазин
+    # Обеспечиваем существование пользователя
+    ensure_user(uid)
+    
+    # Безопасно получаем баланс
+    balance = get_coin_balance(uid)
+    
+    # Формируем текст со структурированной информацией
     header = pick_lang(
         lang,
-        f"🪙 Баланс: {balance} монет\n\nОберіть товар нижче:",
-        f"🪙 Balance: {balance} coins\n\nChoose an item below:"
+        f"🛒 Магазин Спортсмена\n\n🪙 Баланс: {balance} монет\n\nОберіть категорію товара:",
+        f"🛒 Sports Shop\n\n🪙 Balance: {balance} coins\n\nChoose a category:"
     )
     
-    # Генерируем информацию по категориям
-    categories = {}
-    for item_id, item in SHOP_ITEMS.items():
-        cat = item.get('category', 'Інше')
-        if cat not in categories:
-            categories[cat] = []
-        categories[cat].append(item_id)
-    
-    lines = [header]
-    for cat in sorted(categories.keys()):
-        lines.append(f"\n{'='*40}")
-        lines.append(f"{cat}")
-        lines.append('='*40)
-        
-        for item_id in categories[cat]:
-            item = SHOP_ITEMS[item_id]
-            icon = item.get('icon', '🛍️')
-            name = pick_lang(lang, item['uk_name'], item['en_name'])
-            desc = pick_lang(lang, item['uk_desc'], item['en_desc'])
-            lines.append(f"{icon} {item['cost']}🪙 | {name}")
-            lines.append(f"  └─ {desc}")
-
-    await message.answer(
-        style_block(
-            pick_lang(lang, "🛒 Магазин Спортсмена", "🛒 Sports Shop"),
-            "\n".join(lines),
-            icon="🛒"
-        ),
-        parse_mode="HTML",
-        reply_markup=shop_keyboard(lang)
-    )
+    try:
+        # Отправляем сообщение с клавиатурой категорий
+        await message.answer(
+            header,
+            parse_mode=None,
+            reply_markup=shop_keyboard(lang)
+        )
+    except Exception as e:
+        print(f"Error in shop command: {e}")
+        # Fallback ответ
+        await message.answer(
+            pick_lang(
+                lang,
+                f"🛒 Магазин\n\n🪙 Баланс: {balance} монет\n\nИспользуйте кнопки для навигации.",
+                f"🛒 Shop\n\n🪙 Balance: {balance} coins\n\nUse buttons to navigate."
+            )
+        )
 
 
 @dp.callback_query(lambda c: c.data == "shop_noop")
