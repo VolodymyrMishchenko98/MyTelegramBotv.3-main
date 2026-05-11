@@ -22,8 +22,8 @@
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone https://github.com/yourusername/MyTelegramBot.git
-cd MyTelegramBot
+git clone https://github.com/VolodymyrMishchenko98/MyTelegramBotv.3-main
+cd MyTelegramBotv.3-main
 ```
 
 ### 2. Создать виртуальное окружение
