@@ -1,0 +1,5 @@
+aiogram
+apscheduler
+aiohttp
+requests
+python-dotenv

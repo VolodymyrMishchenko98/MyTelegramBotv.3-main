@@ -1,0 +1,16 @@
+.env
+*.db
+*.sqlite*
+sportbot.db
+
+# Python
+__pycache__/
+*.pyc
+
+# Editors / local
+.DS_Store
+.idea/
+.vscode/
+
+# Env
+venv/
