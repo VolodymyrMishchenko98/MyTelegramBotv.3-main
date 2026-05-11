@@ -1,8 +1,0 @@
-.env
-*.db
-*.pyc
-__pycache__/
-.DS_Store
-.idea/
-.vscode/
-sportbot.db
